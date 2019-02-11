@@ -13,10 +13,10 @@ let rec expr (e:Ttree.expr) destr destl = match e.expr_node with
 
 let rec stmt (s:Ttree.stmt) destl retr exitl = match s with
   | Ttree.Sreturn e -> 
-    begin
-      match e.expr_node with
-      | Ttree.Econst e -> generate (Econst (e, retr, exitl))
-    end
+    expr e retr exitl
+  | Ttree.Sblock (decl_var_list, stmt_list) -> 
+      List.fold_right (fun s l -> stmt s l retr l ) stmt_list destl (* retr is not used in this case*)
+
 let deffun (f:Ttree.decl_fun) = 
   let r = Register.fresh () in 
   let l = Label.fresh () in
