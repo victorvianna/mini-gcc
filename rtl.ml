@@ -101,6 +101,10 @@ end
 let mk_and (e1:Ttree.expr) (e2:Ttree.expr) destr destl = failwith "TODO"
 let mk_or (e1:Ttree.expr) (e2:Ttree.expr) destr destl = failwith "TODO"
 
+(* table for local variable access: gets register and type  *)
+type variable = register * Ttree.typ
+let get_memo_var = (Hashtbl.create 10 : (string, variable) Hashtbl.t)
+
 let rec expr (e:Ttree.expr) destr destl = match e.expr_node with
   | Ttree.Econst e -> generate (Econst(e, destr, destl))
   | Ttree.Ebinop (op, e1, e2)  ->
@@ -119,12 +123,25 @@ let rec expr (e:Ttree.expr) destr destl = match e.expr_node with
       | Band -> mk_and e1 e2 destr destl
       | Bor -> mk_or e1 e2 destr destl
     end
-
+  | Ttree.Eaccess_local name ->
+  begin
+    let (v:variable) = Hashtbl.find get_memo_var name in
+    match v with
+    | (r, Ttree.Tint) -> generate (Eload (r, 0, destr, destl))
+    | (_, _) -> failwith "TODO: support access of structures"
+  end
 let rec stmt (s:Ttree.stmt) destl retr exitl = match s with
   | Ttree.Sreturn e ->
     expr e retr exitl
   | Ttree.Sblock (decl_var_list, stmt_list) ->
-      List.fold_right (fun s l -> stmt s l retr l ) stmt_list destl (* retr is not used in this case*)
+  begin
+    let allocate_variable (decl_var:Ttree.decl_var) = match decl_var with
+    | Ttree.Tint, name -> Hashtbl.add get_memo_var name (Register.fresh (),Ttree.Tint)
+    | _, _ -> failwith "TODO: support allocation of structures"
+    in
+    List.iter allocate_variable decl_var_list;
+    List.fold_right (fun s l -> stmt s l retr l ) stmt_list destl (* retr is not used in this case*)
+  end
 
 let deffun (f:Ttree.decl_fun) =
   let r = Register.fresh () in
