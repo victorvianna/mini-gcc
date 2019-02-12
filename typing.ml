@@ -5,11 +5,12 @@ exception Error of string
 
 let struct_map = Hashtbl.create 10 (* ident -> structure *)
 let var_map = Hashtbl.create 10 (* ident -> variable *)
+let fun_map = Hashtbl.create 10 (* ident -> decl_fun *)
 
 let get_fun_typ (dfun : Ptree.decl_fun) : typ =
     match (dfun.fun_typ : Ptree.typ) with
     | Ptree.Tint -> Tint
-    | Ptree.Tstructp id -> Tstructp (Hashtbl.find struct_map id)
+    | Ptree.Tstructp id -> Tstructp (Hashtbl.find struct_map id.id)
     | _ -> raise (Error "Wrong function return type")
 
 let get_fun_name (dfun : Ptree.decl_fun) =
@@ -18,7 +19,7 @@ let get_fun_name (dfun : Ptree.decl_fun) =
 let get_decl_var (decl: Ptree.decl_var) =
     match decl with
         | Ptree.Tint, i -> Tint, i.id
-        | Ptree.Tstructp st, i-> Tstructp (Hashtbl.find struct_map st), i.id
+        | Ptree.Tstructp st, i-> Tstructp (Hashtbl.find struct_map st.id), i.id
 
 let get_decl_list (dlist : Ptree.decl_var list) =
     let rec aux acc = function
@@ -44,6 +45,14 @@ let get_str_field sname sfield =
     let str = Hashtbl.find struct_map sname in
     Hashtbl.find str.str_fields sfield
 
+(* verifies that the type of a parameter matches the
+ * type of the argument *)
+let equiv_arg_types (x : Ptree.typ) y =
+    match x, y with
+    | Ptree.Tint, Tint | Ptree.Tint, Ttypenull -> true
+    | Ptree.Tstructp id, Tstructp st ->
+            if id.id = st.str_name then true else false
+    | _ -> false
 
 (* continuar *)
 let rec get_expr (e : Ptree.expr) =
@@ -53,7 +62,7 @@ let rec get_expr (e : Ptree.expr) =
     | Ptree.Eassign _ -> get_expr_assign e
     | Ptree.Eunop _ -> get_expr_unop e
     | Ptree.Ebinop _ -> get_expr_binop e
-    | Ptree.Ecall _ -> raise (Error "not implemented")
+    | Ptree.Ecall _ -> get_expr_call e
     | Ptree.Esizeof _ -> raise (Error "not implemented")
 and
 get_expr_unop (e : Ptree.expr) =
@@ -110,8 +119,26 @@ get_expr_binop (e : Ptree.expr) =
         let e1 = get_expr _e1 in
         let e2 = get_expr _e2 in
         {expr_node = Ebinop (bop, e1, e2); expr_typ = Tint}
-        
-
+and
+get_expr_call (e : Ptree.expr) =
+    let Ptree.Ecall (id, elist) = e.expr_node in
+    let fdecl_fun:Ptree.decl_fun = Hashtbl.find fun_map id in
+    let ret_typ = match fdecl_fun.fun_typ with
+        | Ptree.Tint -> Tint
+        | Ptree.Tstructp i -> Tstructp (Hashtbl.find struct_map i.id) in
+    let formals_decls:Ptree.decl_var list = fdecl_fun.fun_formals in
+    let formals : Ptree.typ list = List.map fst formals_decls in
+    let args = List.map get_expr elist in
+    let args_typs = List.map (fun x -> x.expr_typ) args in
+    let rec valid_arg_type flist alist =
+        match flist, alist with
+            | [], [] -> true
+            | x::xs, y::ys -> equiv_arg_types x y && valid_arg_type xs ys
+            | _ -> raise (Error "Wrong number of arguments")
+    in
+    if valid_arg_type formals args_typs
+    then {expr_node = Ecall (id.id, args); expr_typ = ret_typ}
+    else raise (Error "Invalid argument type")
 
 
 let rec get_stmt (stmt : Ptree.stmt) =
