@@ -7,121 +7,36 @@ let generate i =
   graph := Label.M.add l i !graph;
   l
 
-(* functions for instruction selection of arithmetic operations *)
-let mk_eq (e1:Ttree.expr) (e2:Ttree.expr) destr destl = match e1.expr_node, e2.expr_node with
-| Econst x1, Econst x2 ->
-begin
-  let r = Register.fresh () in
-  destl = generate (Econst (x1, destr, destl));
-  destl = generate (Econst (x2, r, destl));
-  destl = generate (Embinop (Ops.Msete, r, destr, destl));
-  destl
-end
-let mk_neq (e1:Ttree.expr) (e2:Ttree.expr) destr destl = match e1.expr_node, e2.expr_node with
-| Econst x1, Econst x2 ->
-begin
-  let r = Register.fresh () in
-  destl = generate (Econst (x1, destr, destl));
-  destl = generate (Econst (x2, r, destl));
-  destl = generate (Embinop (Ops.Msetne, r, destr, destl));
-  destl
-end
-let mk_lt (e1:Ttree.expr) (e2:Ttree.expr) destr destl = match e1.expr_node, e2.expr_node with
-| Econst x1, Econst x2 ->
-begin
-  let r = Register.fresh () in
-  destl = generate (Econst (x1, destr, destl));
-  destl = generate (Econst (x2, r, destl));
-  destl = generate (Embinop (Ops.Msetl, r, destr, destl));
-  destl
-end
-let mk_le (e1:Ttree.expr) (e2:Ttree.expr) destr destl = match e1.expr_node, e2.expr_node with
-| Econst x1, Econst x2 ->
-begin
-  let r = Register.fresh () in
-  destl = generate (Econst (x1, destr, destl));
-  destl = generate (Econst (x2, r, destl));
-  destl = generate (Embinop (Ops.Msetle, r, destr, destl));
-  destl
-end
-let mk_gt (e1:Ttree.expr) (e2:Ttree.expr) destr destl = match e1.expr_node, e2.expr_node with
-| Econst x1, Econst x2 ->
-begin
-  let r = Register.fresh () in
-  destl = generate (Econst (x1, destr, destl));
-  destl = generate (Econst (x2, r, destl));
-  destl = generate (Embinop (Ops.Msetg, r, destr, destl));
-  destl
-end
-let mk_ge (e1:Ttree.expr) (e2:Ttree.expr) destr destl = match e1.expr_node, e2.expr_node with
-| Econst x1, Econst x2 ->
-begin
-  let r = Register.fresh () in
-  destl = generate (Econst (x1, destr, destl));
-  destl = generate (Econst (x2, r, destl));
-  destl = generate (Embinop (Ops.Msetge, r, destr, destl));
-  destl
-end
-let mk_add (e1:Ttree.expr) (e2:Ttree.expr) destr destl = match e1.expr_node, e2.expr_node with
-| Econst x1, Econst x2 ->
-begin
-  let r = Register.fresh () in
-  destl = generate (Econst (x1, destr, destl));
-  destl = generate (Econst (x2, r, destl));
-  destl = generate (Embinop (Ops.Madd, r, destr, destl));
-  destl
-end
-let mk_sub (e1:Ttree.expr) (e2:Ttree.expr) destr destl = match e1.expr_node, e2.expr_node with
-| Econst x1, Econst x2 ->
-begin
-  let r = Register.fresh () in
-  destl = generate (Econst (x1, destr, destl));
-  destl = generate (Econst (x2, r, destl));
-  destl = generate (Embinop (Ops.Msub, r, destr, destl));
-  destl
-end
-let mk_mul (e1:Ttree.expr) (e2:Ttree.expr) destr destl = match e1.expr_node, e2.expr_node with
-| Econst x1, Econst x2 ->
-begin
-  let r = Register.fresh () in
-  destl = generate (Econst (x1, destr, destl));
-  destl = generate (Econst (x2, r, destl));
-  destl = generate (Embinop (Ops.Mmul, r, destr, destl));
-  destl
-end
-let mk_div (e1:Ttree.expr) (e2:Ttree.expr) destr destl = match e1.expr_node, e2.expr_node with
-| Econst x1, Econst x2 ->
-begin
-  let r = Register.fresh () in
-  destl = generate (Econst (x1, destr, destl));
-  destl = generate (Econst (x2, r, destl));
-  destl = generate (Embinop (Ops.Mdiv, r, destr, destl));  (* TODO: throw exception if x2 = 0 ? *)
-  destl
-end
-let mk_and (e1:Ttree.expr) (e2:Ttree.expr) destr destl = failwith "TODO"
-let mk_or (e1:Ttree.expr) (e2:Ttree.expr) destr destl = failwith "TODO"
-
 (* table for local variable access: gets register and type  *)
 type variable = register * Ttree.typ
 let get_memo_var = (Hashtbl.create 10 : (string, variable) Hashtbl.t)
 
-let rec expr (e:Ttree.expr) destr destl = match e.expr_node with
+let rec naive_apply_binop op (e1:Ttree.expr) (e2:Ttree.expr) destr destl =
+  let r = Register.fresh () in
+  let destl = expr e1 destr destl in
+  let destl = expr e2 r destl in
+  let destl = generate (Embinop(op, r, destr, destl)) in
+  destl
+
+and
+
+expr (e:Ttree.expr) (destr:register) (destl:label) : label = match e.expr_node with
   | Ttree.Econst e -> generate (Econst(e, destr, destl))
   | Ttree.Ebinop (op, e1, e2)  ->
     begin
       match op with
-      | Beq -> mk_eq e1 e2 destr destl
-      | Bneq -> mk_neq e1 e2 destr destl
-      | Blt -> mk_lt e1 e2 destr destl
-      | Ble -> mk_le e1 e2 destr destl
-      | Bgt -> mk_gt e1 e2 destr destl
-      | Bge -> mk_ge e1 e2 destr destl
-      | Badd -> mk_add e1 e2 destr destl
-      | Bsub -> mk_sub e1 e2 destr destl
-      | Bmul -> mk_mul e1 e2 destr destl
-      | Bdiv -> mk_div e1 e2 destr destl
-      | Band -> mk_and e1 e2 destr destl
-      | Bor -> mk_or e1 e2 destr destl
+      | Beq -> naive_apply_binop Msete e1 e2 destr destl
+      | Bneq -> naive_apply_binop Msetne e1 e2 destr destl
+      | Blt -> naive_apply_binop Msetl e1 e2 destr destl
+      | Ble -> naive_apply_binop Msetle e1 e2 destr destl
+      | Bgt -> naive_apply_binop Msetg e1 e2 destr destl
+      | Bge -> naive_apply_binop Msetge e1 e2 destr destl
+      | Badd -> naive_apply_binop Madd e1 e2 destr destl
+      | Bsub -> naive_apply_binop Msub e1 e2 destr destl
+      | Bmul -> naive_apply_binop Mmul e1 e2 destr destl
+      | Bdiv -> naive_apply_binop Mdiv e1 e2 destr destl
+      | Band -> failwith "TODO"
+      | Bor -> failwith "TODO"
     end
   | Ttree.Eaccess_local name ->
   begin
@@ -130,6 +45,7 @@ let rec expr (e:Ttree.expr) destr destl = match e.expr_node with
     | (r, Ttree.Tint) -> generate (Eload (r, 0, destr, destl))
     | (_, _) -> failwith "TODO: support access of structures"
   end
+
 let rec stmt (s:Ttree.stmt) destl retr exitl = match s with
   | Ttree.Sreturn e ->
     expr e retr exitl
