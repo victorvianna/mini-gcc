@@ -52,7 +52,7 @@ let rec get_expr (e : Ptree.expr) =
     | Ptree.Eright _ -> raise (Error "not implemented")
     | Ptree.Eassign _ -> get_expr_assign e
     | Ptree.Eunop _ -> get_expr_unop e
-    | Ptree.Ebinop _ -> raise (Error "not implemented")
+    | Ptree.Ebinop _ -> get_expr_binop e
     | Ptree.Ecall _ -> raise (Error "not implemented")
     | Ptree.Esizeof _ -> raise (Error "not implemented")
 and
@@ -90,20 +90,27 @@ get_expr_assign (e : Ptree.expr) =
                 else raise (Error "Invalid assignment")
             | _ -> raise (Error "Undefined struct")
         end
-(* and *)
-(* get_expr_binop (e : Ptree.expr) = *)
-(*     let Ptree.Ebinop(bop, _e1, _e2) in *)
-(*     let e1 = get_expr _e1 in *)
-(*     let e2 = get_expr _e2 in *)
-(*     match bop with *)
-(*     | Beq *)
-(*     | Bneq *)
-(*     | Blt *)
-(*     | Ble *)
-(*     | Bgt *)
-(*     | Bge -> if equiv_types e1.expr_typ e2.expr_typ *)
-(*                 then {expr_node = Ebinop (bop, e1, e2); expr_type = Tint} *)
-(*                 else raise (Error "Invalid operands") *)
+and
+get_expr_binop (e : Ptree.expr) =
+    let Ptree.Ebinop(bop, _e1, _e2) = e.expr_node in
+    match bop with
+    | Beq | Bneq | Blt | Ble | Bgt| Bge -> 
+        let e1 = get_expr _e1 in
+        let e2 = get_expr _e2 in
+        if equiv_types e1.expr_typ e2.expr_typ
+        then {expr_node = Ebinop (bop, e1, e2); expr_typ = Tint}
+        else raise (Error "Wrong operand types")
+    | Badd | Bsub | Bmul | Bdiv ->
+        let e1 = get_expr _e1 in
+        let e2 = get_expr _e2 in
+        if equiv_types e1.expr_typ Tint && equiv_types e2.expr_typ Tint
+        then {expr_node = Ebinop (bop, e1, e2); expr_typ = Tint} 
+        else raise (Error "Wrong operand types")
+    | Band | Bor -> 
+        let e1 = get_expr _e1 in
+        let e2 = get_expr _e2 in
+        {expr_node = Ebinop (bop, e1, e2); expr_typ = Tint}
+        
 
 
 
