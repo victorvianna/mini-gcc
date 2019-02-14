@@ -3,9 +3,9 @@ open Ttree
 (* utiliser cette exception pour signaler une erreur de typage *)
 exception Error of string
 
-let struct_map = Hashtbl.create 10 (* ident -> Ttree.structure *)
-let var_map = Hashtbl.create 10 (* ident -> Ttree.decl_var *)
-let fun_map = Hashtbl.create 10 (* ident -> Ttree.decl_fun *)
+let struct_map = Hashtbl.create 10 (* Ttree.ident -> Ttree.structure *)
+let var_map = Hashtbl.create 10 (* Ttree.ident -> Ttree.decl_var *)
+let fun_map = Hashtbl.create 10 (* Ttree.ident -> Ttree.decl_fun *)
 
 let get_fun_typ (dfun : Ptree.decl_fun) : typ =
     match (dfun.fun_typ : Ptree.typ) with
@@ -47,11 +47,11 @@ let get_str_field sname sfield =
 
 (* verifies that the type of a parameter matches the
  * type of the argument *)
-let equiv_arg_types (x : Ptree.typ) y =
-    match x, y with
-    | Ptree.Tint, Tint | Ptree.Tint, Ttypenull -> true
-    | Ptree.Tstructp id, Tstructp st ->
-            if id.id = st.str_name then true else false
+let equiv_arg_types ftype atype =
+    match ftype, atype with
+    | Tint, Tint | Tint, Ttypenull -> true
+    | Tstructp expected_st, Tstructp actual_st ->
+            if expected_st.str_name = actual_st.str_name then true else false
     | _ -> false
 
 (* continuar *)
@@ -126,22 +126,18 @@ get_expr_binop (e : Ptree.expr) =
 and
 get_expr_call (e : Ptree.expr) =
     let Ptree.Ecall (id, elist) = e.expr_node in
-    let fdecl_fun:Ptree.decl_fun = Hashtbl.find fun_map id in
-    let ret_typ = match fdecl_fun.fun_typ with
-        | Ptree.Tint -> Tint
-        | Ptree.Tstructp i -> Tstructp (Hashtbl.find struct_map i.id) in
-    let formals_decls:Ptree.decl_var list = fdecl_fun.fun_formals in
-    let formals : Ptree.typ list = List.map fst formals_decls in
+    let fdecl_fun = Hashtbl.find fun_map id.id in
+    let formals_types = List.map fst fdecl_fun.fun_formals in
     let args = List.map get_expr elist in
-    let args_typs = List.map (fun x -> x.expr_typ) args in
+    let args_types = List.map (fun x -> x.expr_typ) args in
     let rec valid_arg_type flist alist =
         match flist, alist with
             | [], [] -> true
             | x::xs, y::ys -> equiv_arg_types x y && valid_arg_type xs ys
             | _ -> raise (Error "Wrong number of arguments")
     in
-    if valid_arg_type formals args_typs
-    then {expr_node = Ecall (id.id, args); expr_typ = ret_typ}
+    if valid_arg_type formals_types args_types
+    then {expr_node = Ecall (id.id, args); expr_typ = fdecl_fun.fun_typ}
     else raise (Error "Invalid argument type")
 and
 get_expr_right (e : Ptree.expr) =
@@ -193,20 +189,34 @@ get_stmt_list (stmts : Ptree.stmt list) =
 let get_fun_body (dfun : Ptree.decl_fun) =
     get_block dfun.fun_body
 
-let process_dfun dfun =
-    {
-        fun_typ = get_fun_typ dfun;
-        fun_name = get_fun_name dfun;
-        fun_formals = get_fun_formals dfun;
-        fun_body = get_fun_body dfun;
-    }
+let process_dfun (dfun : Ptree.decl_fun) =
+    let new_fun =
+        {
+            fun_typ = get_fun_typ dfun;
+            fun_name = get_fun_name dfun;
+            fun_formals = get_fun_formals dfun;
+            fun_body = get_fun_body dfun;
+        }
+    in
+    Hashtbl.add fun_map new_fun.fun_name new_fun; new_fun
+
+let process_dstr (dstr : Ptree.decl_struct) =
+    let str_name, fields_list = dstr in
+    let htbl = Hashtbl.create (List.length fields_list) in
+    let translate_type (t : Ptree.typ) =
+        match t with
+        | Ptree.Tint -> Tint
+        | Ptree.Tstructp id -> Tstructp (Hashtbl.find struct_map id.id) in
+    let add_decl_var_to_htbl (t, id : Ptree.typ * Ptree.ident) =
+        let id = id.id in
+        Hashtbl.add htbl id {field_name = id; field_typ = (translate_type t)} in
+    List.iter add_decl_var_to_htbl fields_list;
+    Hashtbl.add struct_map str_name.id {str_name = str_name.id; str_fields = htbl}
 
 let program p = 
     let rec aux acc = function
         | [] -> List.rev acc
         | Ptree.Dfun dfun :: tail -> aux (process_dfun dfun :: acc) tail
-        | _ -> raise (Error "not implemented")
-        (*| Ptree.Dstruct dstruct :: tail -> process_dstruct dstruct; aux acc
-         * tail*)
+        | Ptree.Dstruct dstr :: tail -> process_dstr dstr; aux acc tail
     in
     {funs = aux [] p}
