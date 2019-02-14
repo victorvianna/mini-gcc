@@ -3,9 +3,9 @@ open Ttree
 (* utiliser cette exception pour signaler une erreur de typage *)
 exception Error of string
 
-let struct_map = Hashtbl.create 10 (* ident -> structure *)
-let var_map = Hashtbl.create 10 (* ident -> variable *)
-let fun_map = Hashtbl.create 10 (* ident -> decl_fun *)
+let struct_map = Hashtbl.create 10 (* ident -> Ttree.structure *)
+let var_map = Hashtbl.create 10 (* ident -> Ttree.decl_var *)
+let fun_map = Hashtbl.create 10 (* ident -> Ttree.decl_fun *)
 
 let get_fun_typ (dfun : Ptree.decl_fun) : typ =
     match (dfun.fun_typ : Ptree.typ) with
@@ -57,13 +57,17 @@ let equiv_arg_types (x : Ptree.typ) y =
 (* continuar *)
 let rec get_expr (e : Ptree.expr) =
     match e.expr_node with
-    | Ptree.Econst i -> {expr_node = Econst i; expr_typ = Tint}
-    | Ptree.Eright _ -> raise (Error "not implemented")
+    | Ptree.Econst _  -> get_expr_const  e
+    | Ptree.Eright _  -> get_expr_right  e
     | Ptree.Eassign _ -> get_expr_assign e
-    | Ptree.Eunop _ -> get_expr_unop e
-    | Ptree.Ebinop _ -> get_expr_binop e
-    | Ptree.Ecall _ -> get_expr_call e
-    | Ptree.Esizeof _ -> raise (Error "not implemented")
+    | Ptree.Eunop _   -> get_expr_unop   e
+    | Ptree.Ebinop _  -> get_expr_binop  e
+    | Ptree.Ecall _   -> get_expr_call   e
+    | Ptree.Esizeof _ -> get_expr_sizeof e
+and
+get_expr_const (e : Ptree.expr) =
+    let Ptree.Econst i = e.expr_node in
+    {expr_node = Econst i; expr_typ = Tint}
 and
 get_expr_unop (e : Ptree.expr) =
     let Ptree.Eunop (op, e1) = e.expr_node in
@@ -80,7 +84,7 @@ get_expr_assign (e : Ptree.expr) =
     let e2 = get_expr e1 in
     match l with
     | Ptree.Lident id ->
-        let var_typ = Hashtbl.find var_map id.id in
+        let var_typ, _ = Hashtbl.find var_map id.id in
         if equiv_types e2.expr_typ var_typ
         then {expr_node = Eassign_local (id.id, e2); expr_typ = var_typ}
         else raise (Error "Invalid assignment")
@@ -139,7 +143,31 @@ get_expr_call (e : Ptree.expr) =
     if valid_arg_type formals args_typs
     then {expr_node = Ecall (id.id, args); expr_typ = ret_typ}
     else raise (Error "Invalid argument type")
-
+and
+get_expr_right (e : Ptree.expr) =
+    let Ptree.Eright l = e.expr_node in
+    match l with
+    | Ptree.Lident id -> 
+            let t, _ = Hashtbl.find var_map id.id in
+            {expr_node = Eaccess_local id.id; expr_typ =  t}
+    | Ptree.Larrow (e1, id) ->
+            let e2 = get_expr e1 in
+            begin
+                match e2.expr_node with
+                | Eaccess_local st_name -> 
+                        let st_field = get_str_field st_name id.id in
+                        {
+                            expr_node = Eaccess_field (e2, st_field);
+                            expr_typ = st_field.field_typ
+                        }
+                | _ -> raise (Error "Invalid expression")
+            end
+and 
+get_expr_sizeof (e : Ptree.expr) =
+    let Ptree.Esizeof id = e.expr_node in
+    let st = Hashtbl.find struct_map id.id in
+    {expr_node = Esizeof st; expr_typ = Tint}
+    
 
 let rec get_stmt (stmt : Ptree.stmt) =
     match stmt.stmt_node with
