@@ -13,9 +13,9 @@ let get_memo_var = (Hashtbl.create 10 : (string, variable) Hashtbl.t)
 
 let rec naive_apply_binop op (e1:Ttree.expr) (e2:Ttree.expr) destr destl =
   let r = Register.fresh () in
-  let destl = expr e1 destr destl in
-  let destl = expr e2 r destl in
   let destl = generate (Embinop(op, r, destr, destl)) in
+  let destl = expr e2 r destl in
+  let destl = expr e1 destr destl in
   destl
 
 and
