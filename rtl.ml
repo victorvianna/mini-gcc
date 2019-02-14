@@ -68,6 +68,7 @@ let rec stmt (s:Ttree.stmt) destl retr exitl = match s with
     List.iter allocate_variable decl_var_list;
     List.fold_right (fun s l -> stmt s l retr l ) stmt_list destl (* retr is not used in this case*)
   end
+  | Ttree.Sskip -> destl
 
 let deffun (f:Ttree.decl_fun) =
   let r = Register.fresh () in
