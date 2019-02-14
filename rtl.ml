@@ -59,6 +59,8 @@ expr (e:Ttree.expr) (destr:register) (destl:label) : label = match e.expr_node w
 let rec stmt (s:Ttree.stmt) destl retr exitl = match s with
   | Ttree.Sreturn e ->
     expr e retr exitl
+  | Ttree.Sexpr e ->
+    expr e retr destl
   | Ttree.Sblock (decl_var_list, stmt_list) ->
   begin
     let allocate_variable (decl_var:Ttree.decl_var) = match decl_var with
