@@ -24,7 +24,11 @@ let get_decl_var (decl: Ptree.decl_var) =
 let get_decl_list (dlist : Ptree.decl_var list) =
     let rec aux acc = function
         | [] -> List.rev acc
-        | decl :: tail -> aux ((get_decl_var decl) :: acc) tail
+        | decl :: tail -> 
+                let dvar = get_decl_var decl in
+                let var_name = snd dvar in
+                Hashtbl.add var_map var_name dvar;
+                aux (dvar :: acc) tail
     in
     aux [] dlist
 
@@ -176,7 +180,9 @@ let rec get_stmt (stmt : Ptree.stmt) =
 and
 get_block (b : Ptree.block) =
     let decls, stmts = b in
-    get_decl_list decls, get_stmt_list stmts
+    let decls = get_decl_list decls in
+    let stmts = get_stmt_list stmts in
+    decls, stmts
 and
 get_stmt_list (stmts : Ptree.stmt list) =
     let rec aux acc = function
@@ -190,12 +196,17 @@ let get_fun_body (dfun : Ptree.decl_fun) =
     get_block dfun.fun_body
 
 let process_dfun (dfun : Ptree.decl_fun) =
+    Hashtbl.clear var_map;
+    let fun_type = get_fun_typ dfun in
+    let fun_name = get_fun_name dfun in
+    let fun_formals = get_fun_formals dfun in
+    let fun_body = get_fun_body dfun in
     let new_fun =
         {
-            fun_typ = get_fun_typ dfun;
-            fun_name = get_fun_name dfun;
-            fun_formals = get_fun_formals dfun;
-            fun_body = get_fun_body dfun;
+            fun_typ = fun_type;
+            fun_name = fun_name;
+            fun_formals = fun_formals;
+            fun_body = fun_body;
         }
     in
     Hashtbl.add fun_map new_fun.fun_name new_fun; new_fun
