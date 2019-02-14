@@ -38,6 +38,16 @@ expr (e:Ttree.expr) (destr:register) (destl:label) : label = match e.expr_node w
       | Band -> failwith "TODO"
       | Bor -> failwith "TODO"
     end
+  | Ttree.Eunop (op, e)  ->
+    begin
+      match op with
+      | Uminus ->
+      let (zero_expr:Ttree.expr) = {expr_typ = Ttree.Tint; expr_node = (Ttree.Econst Int32.zero)} in
+      naive_apply_binop Msub zero_expr e destr destl
+      | Unot ->
+      failwith "TODO"
+      (* let (not_expr:Ttree.expr) = {expr_typ = Ttree.Tint; expr_node = (Ttree.Ebinop e )} *)
+    end
   | Ttree.Eaccess_local name ->
   begin
     let (v:variable) = Hashtbl.find get_memo_var name in
