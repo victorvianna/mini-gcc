@@ -35,8 +35,20 @@ expr (e:Ttree.expr) (destr:register) (destl:label) : label = match e.expr_node w
       | Bsub -> naive_apply_binop Msub e1 e2 destr destl
       | Bmul -> naive_apply_binop Mmul e1 e2 destr destl
       | Bdiv -> naive_apply_binop Mdiv e1 e2 destr destl
-      | Band -> failwith "TODO"
-      | Bor -> failwith "TODO"
+      | Band ->
+      (* if e1 is false, result is e1 and we proceed to destl directly;
+      otherwise result is e2, we calculate it then go to destl;
+      we use test jz because FALSE is the significative value for && *)
+      let calculate_second = expr e2 destr destl in
+      let testl = generate (Emubranch (Mjz, destr, destl, calculate_second)) in
+      expr e1 destr testl
+      | Bor ->
+      (* if e1 is true, result is e1 and we proceed to destl directly;
+      otherwise result is e2, we calculate it then go to destl;
+      we use test jnz because TRUE is the significative value for || *)
+      let calculate_second = expr e2 destr destl in
+      let testl = generate (Emubranch (Mjnz, destr, destl, calculate_second)) in
+      expr e1 destr testl
     end
   | Ttree.Eunop (op, e)  ->
     begin
@@ -80,6 +92,12 @@ let rec stmt (s:Ttree.stmt) destl retr exitl = match s with
     List.fold_right (fun s l -> stmt s l retr l ) stmt_list destl (* retr is not used in this case*)
   end
   | Ttree.Sskip -> destl
+  | Ttree.Sif (e, s1, s2) ->
+  let truel = stmt s1 destl retr exitl in
+  let falsel = stmt s2 destl retr exitl in
+  let r_check = Register.fresh () in
+  let testl = generate (Emubranch (Mjnz, r_check, truel, falsel)) in
+  expr e r_check testl
 
 let deffun (f:Ttree.decl_fun) =
   let r = Register.fresh () in
