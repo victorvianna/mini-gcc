@@ -55,6 +55,15 @@ expr (e:Ttree.expr) (destr:register) (destl:label) : label = match e.expr_node w
     | (r, Ttree.Tint) -> generate (Eload (r, 0, destr, destl))
     | (_, _) -> failwith "TODO: support access of structures"
   end
+  | Ttree.Eassign_local (name, e) ->
+  begin
+    let (v:variable) = Hashtbl.find get_memo_var name in
+    match v with
+    | (r, Ttree.Tint) ->
+    let destl = generate (Estore (r, destr, 0, destl)) in (* assignment has same value as assigned *)
+    expr e r destl;
+    | (_, _) -> failwith "TODO: support assignment of structures"
+  end
 
 let rec stmt (s:Ttree.stmt) destl retr exitl = match s with
   | Ttree.Sreturn e ->
