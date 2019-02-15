@@ -57,8 +57,12 @@ expr (e:Ttree.expr) (destr:register) (destl:label) : label = match e.expr_node w
       let (zero_expr:Ttree.expr) = {expr_typ = Ttree.Tint; expr_node = (Ttree.Econst Int32.zero)} in
       naive_apply_binop Msub zero_expr e destr destl
       | Unot ->
-      failwith "TODO"
-      (* let (not_expr:Ttree.expr) = {expr_typ = Ttree.Tint; expr_node = (Ttree.Ebinop e )} *)
+      (* TODO: avoid overflow and optimize  *)
+      let (zero_expr:Ttree.expr) = {expr_typ = Ttree.Tint; expr_node = (Ttree.Econst Int32.zero)} in
+      let sub_one = Ops.Maddi (Int32.of_int (-1)) in
+      let destl = generate (Emunop (sub_one, destr, destl)) in
+      let destl = naive_apply_binop Msub zero_expr e destr destl in
+      expr e destr destl
     end
   | Ttree.Eaccess_local name ->
   begin
