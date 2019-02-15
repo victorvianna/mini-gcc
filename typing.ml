@@ -7,19 +7,48 @@ let struct_map = Hashtbl.create 10 (* Ttree.ident -> Ttree.structure *)
 let var_map = Hashtbl.create 10 (* Ttree.ident -> Ttree.decl_var *)
 let fun_map = Hashtbl.create 10 (* Ttree.ident -> Ttree.decl_fun *)
 
+let get_fun_name (dfun : Ptree.decl_fun) =
+    dfun.fun_name.id
+
+let smpl_hdr_msg (f : Lexing.position) (s : Lexing.position) =
+    Printf.sprintf "line %d, characters %d-%d"
+        f.pos_lnum f.pos_cnum s.pos_cnum
+
+let cmplx_hdr_msg (f : Lexing.position) (s : Lexing.position) =
+    Printf.sprintf "from line %d, character %d to line %d character %d"
+        f.pos_lnum f.pos_cnum s.pos_lnum s.pos_cnum
+
+let get_error_hdr_msg (l : Ptree.loc) =
+    let f, s = l in
+    if f.pos_lnum = s.pos_lnum
+    then smpl_hdr_msg f s
+    else cmplx_hdr_msg f s
+
+let get_error_message msg l =
+    let hdr = get_error_hdr_msg l in
+    Printf.sprintf "%s: %s" hdr msg
+
+let raise_error msg (l : Ptree.loc) =
+    let msg = get_error_message msg l in
+    raise (Error msg)
+
 let get_fun_typ (dfun : Ptree.decl_fun) : typ =
     match (dfun.fun_typ : Ptree.typ) with
     | Ptree.Tint -> Tint
     | Ptree.Tstructp id -> Tstructp (Hashtbl.find struct_map id.id)
     | _ -> raise (Error "Wrong function return type")
 
-let get_fun_name (dfun : Ptree.decl_fun) =
-    dfun.fun_name.id
-
 let get_decl_var (decl: Ptree.decl_var) =
     match decl with
         | Ptree.Tint, i -> Tint, i.id
-        | Ptree.Tstructp st, i-> Tstructp (Hashtbl.find struct_map st.id), i.id
+        | Ptree.Tstructp st, i-> 
+                let st_name = i.id in
+                let st = 
+                    try Hashtbl.find struct_map st_name
+                    with Not_found -> raise_error "undefined struct type"
+                    i.id_loc
+                in
+                Tstructp st, st_name
 
 let get_decl_list (dlist : Ptree.decl_var list) =
     let rec aux acc = function
