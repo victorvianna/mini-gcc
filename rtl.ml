@@ -98,6 +98,12 @@ let rec stmt (s:Ttree.stmt) destl retr exitl = match s with
   let r_check = Register.fresh () in
   let testl = generate (Emubranch (Mjnz, r_check, truel, falsel)) in
   expr e r_check testl
+  | Ttree.Swhile (e, s) ->
+  let r_check = Register.fresh() in
+  let gobackl = Label.fresh () in
+  let testl = generate (Emubranch (Mjnz, r_check, gobackl, destl)) in
+  graph := Label.M.add gobackl (Egoto(testl)) !graph;
+  expr e r_check testl
 
 let deffun (f:Ttree.decl_fun) =
   let r = Register.fresh () in
