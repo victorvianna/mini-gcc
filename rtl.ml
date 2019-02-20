@@ -114,7 +114,15 @@ expr (e:Ttree.expr) (destr:register) (destl:label) : label = match e.expr_node w
     let destl = generate (Estore (r, destr, 0, destl)) in (* assignment has same value as assigned *)
     expr e r destl;
   end
-  | Ttree.Eassign_field (e1, field, e2) -> failwith "TODO: support field assign"
+  | Ttree.Eassign_field (e_address, f, e_value) ->
+  begin
+    match e_address.expr_typ with (Tstructp stru) ->
+    let displacement = get_displacement stru f in
+    let r_address = Register.fresh () in
+    let destl = generate (Estore (destr, r_address, displacement, destl)) in
+    let destl = expr e_value destr destl in
+    expr e_address r_address destl
+  end
   | Ttree.Ecall (name, expr_list) ->
   (* backup original variable registers *)
   let ancient_get_var_info = Hashtbl.copy !get_var_info in
