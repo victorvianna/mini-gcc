@@ -3,8 +3,10 @@ open Ttree
 (* utiliser cette exception pour signaler une erreur de typage *)
 exception Error of string
 
+module StringSet = Set.Make(String)
+
 let struct_map = Hashtbl.create 10 (* Ttree.ident -> Ttree.structure *)
-let var_map = Hashtbl.create 10 (* Ttree.ident -> Ttree.decl_var *)
+let var_map = ref (Hashtbl.create 10) (* Ttree.ident -> Ttree.decl_var *)
 let fun_map = Hashtbl.create 10 (* Ttree.ident -> Ttree.decl_fun *)
 
 let get_fun_name (dfun : Ptree.decl_fun) =
@@ -40,26 +42,38 @@ let get_fun_typ (dfun : Ptree.decl_fun) : typ =
 
 let get_decl_var (decl: Ptree.decl_var) =
     match decl with
-        | Ptree.Tint, i -> Tint, i.id
+        | Ptree.Tint, i -> Tint, i
         | Ptree.Tstructp st, i-> 
-                let st_name = i.id in
                 let st = 
-                    try Hashtbl.find struct_map st_name
+                    try Hashtbl.find struct_map st.id
                     with Not_found -> raise_error "undefined struct type"
-                    i.id_loc
+                    st.id_loc
                 in
-                Tstructp st, st_name
+                Tstructp st, i
 
 let get_decl_list (dlist : Ptree.decl_var list) =
-    let rec aux acc = function
+    let rec aux acc var_set = function
         | [] -> List.rev acc
         | decl :: tail -> 
                 let dvar = get_decl_var decl in
+                let var_typ = fst dvar in
                 let var_name = snd dvar in
-                Hashtbl.add var_map var_name dvar;
-                aux (dvar :: acc) tail
+                if StringSet.mem var_name.id var_set
+                    then raise_error "Variable redefinition" var_name.id_loc
+                    else
+                if Hashtbl.mem fun_map var_name.id
+                    then raise_error "Function with same name exists"
+                        var_name.id_loc
+                    else 
+                if Hashtbl.mem struct_map var_name.id
+                    then raise_error "Struct definition with same name exists"
+                        var_name.id_loc
+                    else
+                Hashtbl.add !var_map var_name.id dvar;
+                aux ((var_typ, var_name.id) :: acc) (StringSet.add var_name.id
+                var_set) tail
     in
-    aux [] dlist
+    aux [] (StringSet.empty) dlist
 
 let get_fun_formals (dfun : Ptree.decl_fun) =
     get_decl_list dfun.fun_formals
@@ -74,9 +88,15 @@ let equiv_types t1 t2 =
     | _, _ -> false
 
 (* returns the field of a structure *)
-let get_str_field sname sfield =
-    let str = Hashtbl.find struct_map sname in
-    Hashtbl.find str.str_fields sfield
+let get_str_field sname (fid : Ptree.ident) =
+    let sfield = fid.id in
+    try let str = Hashtbl.find struct_map sname in
+        Hashtbl.find str.str_fields sfield
+    with Not_found ->
+        let message =
+            Printf.sprintf "variable \"%s\" does not contain field \"%s\"" sname fid.id
+        in raise_error message fid.id_loc
+
 
 (* verifies that the type of a parameter matches the
  * type of the argument *)
@@ -115,12 +135,18 @@ and
 get_expr_assign (e : Ptree.expr) =
     let Ptree.Eassign(l, e1) = e.expr_node in
     let e2 = get_expr e1 in
+    let e2 =
+        begin
+            match e2.expr_node with
+            | Econst (0l) -> {expr_node = e2.expr_node; expr_typ = Ttypenull}
+            | _ -> e2
+        end in
     match l with
     | Ptree.Lident id ->
-        let var_typ, _ = Hashtbl.find var_map id.id in
+        let var_typ, _ = Hashtbl.find !var_map id.id in
         if equiv_types e2.expr_typ var_typ
         then {expr_node = Eassign_local (id.id, e2); expr_typ = var_typ}
-        else raise (Error "Invalid assignment")
+        else raise (Error "Invalid assignment: invalid assigned type")
     | Ptree.Larrow (e3, id) ->
         let e4 = get_expr e3 in
         begin match e4.expr_typ with
@@ -177,14 +203,21 @@ get_expr_right (e : Ptree.expr) =
     let Ptree.Eright l = e.expr_node in
     match l with
     | Ptree.Lident id -> 
-            let t, _ = Hashtbl.find var_map id.id in
-            {expr_node = Eaccess_local id.id; expr_typ =  t}
+            begin
+            try let var = Hashtbl.find !var_map id.id in
+                {expr_node = Eaccess_local id.id; expr_typ = fst var}
+            with 
+                Not_found ->
+                    try let str = Hashtbl.find struct_map id.id in
+                    {expr_node = Eaccess_local id.id; expr_typ = Tstructp str}
+                    with Not_found -> raise_error "undefined variable" id.id_loc
+            end
     | Ptree.Larrow (e1, id) ->
             let e2 = get_expr e1 in
             begin
                 match e2.expr_node with
                 | Eaccess_local st_name -> 
-                        let st_field = get_str_field st_name id.id in
+                        let st_field = get_str_field st_name id in
                         {
                             expr_node = Eaccess_field (e2, st_field);
                             expr_typ = st_field.field_typ
@@ -204,7 +237,10 @@ let rec get_stmt (stmt : Ptree.stmt) =
     | Ptree.Sexpr e -> Sexpr (get_expr e)
     | Ptree.Sif (e, s1, s2) -> Sif (get_expr e, get_stmt s1, get_stmt s2)
     | Ptree.Swhile (e, s) -> Swhile (get_expr e, get_stmt s)
-    | Ptree.Sblock b -> Sblock (get_block b)
+    | Ptree.Sblock b ->
+            let hash_tbl_copy = Hashtbl.copy !var_map in
+            let tblock = Sblock (get_block b) in
+            var_map := Hashtbl.copy hash_tbl_copy; tblock
     | Ptree.Sreturn e -> Sreturn (get_expr e)
 and
 get_block (b : Ptree.block) =
@@ -225,7 +261,7 @@ let get_fun_body (dfun : Ptree.decl_fun) =
     get_block dfun.fun_body
 
 let process_dfun (dfun : Ptree.decl_fun) =
-    Hashtbl.clear var_map;
+    Hashtbl.clear !var_map;
     let fun_type = get_fun_typ dfun in
     let fun_name = get_fun_name dfun in
     let fun_formals = get_fun_formals dfun in
@@ -238,7 +274,10 @@ let process_dfun (dfun : Ptree.decl_fun) =
             fun_body = fun_body;
         }
     in
-    Hashtbl.add fun_map new_fun.fun_name new_fun; new_fun
+    try let _ = Hashtbl.find fun_map fun_name in
+        raise_error "Function already defined" dfun.fun_name.id_loc
+    with Not_found ->
+      Hashtbl.add fun_map new_fun.fun_name new_fun; new_fun
 
 let process_dstr (dstr : Ptree.decl_struct) =
     let str_name, fields_list = dstr in
@@ -248,10 +287,15 @@ let process_dstr (dstr : Ptree.decl_struct) =
         | Ptree.Tint -> Tint
         | Ptree.Tstructp id -> Tstructp (Hashtbl.find struct_map id.id) in
     let add_decl_var_to_htbl (t, id : Ptree.typ * Ptree.ident) =
-        let id = id.id in
-        Hashtbl.add htbl id {field_name = id; field_typ = (translate_type t)} in
+        try let _ = Hashtbl.find htbl id.id in
+            raise_error "Variable already defined" id.id_loc
+        with Not_found -> Hashtbl.add htbl id.id {field_name = id.id; field_typ = (translate_type t)} in
     List.iter add_decl_var_to_htbl fields_list;
-    Hashtbl.add struct_map str_name.id {str_name = str_name.id; str_fields = htbl}
+    try let _ = Hashtbl.find struct_map str_name.id in
+        raise_error "Struct already defined" str_name.id_loc
+    with Not_found ->
+      Hashtbl.add struct_map str_name.id {str_name = str_name.id; str_fields =
+          htbl}
 
 let program p = 
     let rec aux acc = function
