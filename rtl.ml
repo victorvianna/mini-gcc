@@ -27,6 +27,18 @@ let allocate_variable (decl_var:Ttree.decl_var) =
   attribute_register decl_var r;
   r
 
+(* function to (deterministically) get the displacement of a field in memo *)
+let get_displacement (stru:Ttree.structure) (field:Ttree.field) =
+  let index_of e l =
+    let rec index_rec i = function
+      | [] -> raise Not_found
+      | hd::tl -> if hd = e then i else index_rec (i+1) tl
+    in
+    index_rec 0 l
+  in
+  let fields_list = Hashtbl.fold (fun k v acc -> v :: acc) stru.str_fields [] in
+  index_of field fields_list
+
 let rec naive_apply_binop op (e1:Ttree.expr) (e2:Ttree.expr) destr destl =
   let r = Register.fresh () in
   let destl = generate (Embinop(op, r, destr, destl)) in
@@ -86,6 +98,14 @@ expr (e:Ttree.expr) (destr:register) (destl:label) : label = match e.expr_node w
     match v with
     | (r, _) -> generate (Eload (r, 0, destr, destl))
   end
+  | Ttree.Eaccess_field (e, f) ->
+  begin
+    match e.expr_typ with (Tstructp stru) ->
+    let displacement = get_displacement stru f in
+    let r_address = Register.fresh () in
+    let destl = generate (Eload (r_address, displacement, destr, destl)) in
+    expr e r_address destl
+  end
   | Ttree.Eassign_local (name, e) ->
   begin
     let (v:var_info) = Hashtbl.find !get_var_info name in
@@ -94,6 +114,7 @@ expr (e:Ttree.expr) (destr:register) (destl:label) : label = match e.expr_node w
     let destl = generate (Estore (r, destr, 0, destl)) in (* assignment has same value as assigned *)
     expr e r destl;
   end
+  | Ttree.Eassign_field (e1, field, e2) -> failwith "TODO: support field assign"
   | Ttree.Ecall (name, expr_list) ->
   (* backup original variable registers *)
   let ancient_get_var_info = Hashtbl.copy !get_var_info in
