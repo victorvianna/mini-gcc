@@ -8,23 +8,24 @@ let generate i =
   l
 
 (* table for local variable access: gets register and type  *)
-type var_info = register * (Ttree.typ option)
+type var_info = register * (Ttree.typ)
 let get_var_info = ref (Hashtbl.create 10 : (string, var_info) Hashtbl.t)
 
 (* table for function info access *)
 type fun_info = {
-  arg_names : string list;
+  args: Ttree.decl_var list
 }
 let get_fun_info = (Hashtbl.create 10 : (string, fun_info) Hashtbl.t)
 
 (* attribute register to certain identifier *)
-let attribute_register (name, register) =
-  Hashtbl.add !get_var_info name (register,None)
+let attribute_register (decl_var:Ttree.decl_var) register = match decl_var with
+  (typ, name) -> Hashtbl.add !get_var_info name (register,typ)
 
-(* allocate register when variable is declared *)
-let allocate_variable (decl_var:Ttree.decl_var) = match decl_var with
-| Ttree.Tint, name -> Hashtbl.add !get_var_info name (Register.fresh (), Some Ttree.Tint)
-| _, _ -> failwith "TODO: support allocation of structures"
+(* allocate register when variable is declared, return register used *)
+let allocate_variable (decl_var:Ttree.decl_var) =
+  let r = Register.fresh () in
+  attribute_register decl_var r;
+  r
 
 let rec naive_apply_binop op (e1:Ttree.expr) (e2:Ttree.expr) destr destl =
   let r = Register.fresh () in
@@ -83,14 +84,14 @@ expr (e:Ttree.expr) (destr:register) (destl:label) : label = match e.expr_node w
   begin
     let (v:var_info) = Hashtbl.find !get_var_info name in
     match v with
-    | (r, Some Ttree.Tint) -> generate (Eload (r, 0, destr, destl))
+    | (r, Ttree.Tint) -> generate (Eload (r, 0, destr, destl))
     | (_, _) -> failwith "TODO: support access of structures"
   end
   | Ttree.Eassign_local (name, e) ->
   begin
     let (v:var_info) = Hashtbl.find !get_var_info name in
     match v with
-    | (r, Some Ttree.Tint) ->
+    | (r, Ttree.Tint) ->
     let destl = generate (Estore (r, destr, 0, destl)) in (* assignment has same value as assigned *)
     expr e r destl;
     | (_, _) -> failwith "TODO: support assignment of structures"
@@ -98,11 +99,9 @@ expr (e:Ttree.expr) (destr:register) (destl:label) : label = match e.expr_node w
   | Ttree.Ecall (name, expr_list) ->
   (* backup original variable registers *)
   let ancient_get_var_info = Hashtbl.copy !get_var_info in
-  (* create registers that will receive arg values *)
-  let new_registers = List.map (fun _ -> Register.fresh ()) expr_list in
   (* associate registers with argument names  *)
   let (fun_info:fun_info) = Hashtbl.find get_fun_info name in
-  List.iter attribute_register (List.combine fun_info.arg_names new_registers);
+  let new_registers = List.map allocate_variable fun_info.args in
   (* generate call *)
   let destl = generate (Ecall (destr, name, new_registers, destl)) in
   (* store calculated arguments in new registers *)
@@ -124,7 +123,7 @@ let rec stmt (s:Ttree.stmt) destl retr exitl = match s with
   begin
     (* backup original variable registers *)
     let ancient_get_var_info = Hashtbl.copy !get_var_info in
-    List.iter allocate_variable decl_var_list;
+    List.map allocate_variable decl_var_list;
     let entry = List.fold_right (fun s l -> stmt s l retr l ) stmt_list destl in (* retr is not used in this case*)
     (* restore original variable registers *)
     get_var_info := ancient_get_var_info;
@@ -151,7 +150,7 @@ let deffun (f:Ttree.decl_fun) =
     (_, name) -> name
   in
   let fun_info = {
-    arg_names = List.map get_name f.fun_formals
+    args = f.fun_formals
   }
   in
   Hashtbl.add get_fun_info f.fun_name fun_info;
