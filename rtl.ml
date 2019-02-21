@@ -136,9 +136,9 @@ expr (e:Ttree.expr) (destr:register) (destl:label) : label = match e.expr_node w
   let calculate_argument pair l = match pair with
     (e,r) -> expr e r l
   in
-  let entry = List.fold_right calculate_argument combined_list destl in
   (* restore original variable registers *)
   get_var_info := ancient_get_var_info;
+  let entry = List.fold_right calculate_argument combined_list destl in
   entry
 
 let rec stmt (s:Ttree.stmt) destl retr exitl = match s with
