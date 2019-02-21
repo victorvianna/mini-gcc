@@ -96,7 +96,7 @@ expr (e:Ttree.expr) (destr:register) (destl:label) : label = match e.expr_node w
   begin
     let (v:var_info) = Hashtbl.find !get_var_info name in
     match v with
-    | (r, _) -> generate (Eload (r, 0, destr, destl))
+    | (r, _) -> generate (Embinop (Mmov, r, destr, destl))
   end
   | Ttree.Eaccess_field (e, f) ->
   begin
@@ -111,7 +111,7 @@ expr (e:Ttree.expr) (destr:register) (destl:label) : label = match e.expr_node w
     let (v:var_info) = Hashtbl.find !get_var_info name in
     match v with
     | (r, _) ->
-    let destl = generate (Estore (r, destr, 0, destl)) in (* assignment has same value as assigned *)
+    let destl = generate (Embinop(Mmov, r, destr, destl)) in (* assignment has same value as assigned *)
     expr e r destl;
   end
   | Ttree.Eassign_field (e_address, f, e_value) ->
