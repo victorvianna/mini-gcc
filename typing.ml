@@ -78,25 +78,24 @@ let get_decl_list (dlist : Ptree.decl_var list) =
 let get_fun_formals (dfun : Ptree.decl_fun) =
     get_decl_list dfun.fun_formals
 
-let equiv_types t1 t2 =
-    if t1 = t2 then true else
-    match t1, t2 with
+let equiv_types t1 t2 = match t1, t2 with
+    | Tint, Tint -> true
     | Ttypenull, _ -> if t2 = Tvoidstar then false else true
     | _, Ttypenull -> if t1 = Tvoidstar then false else true
     | Tvoidstar, Tstructp _ -> true
     | Tstructp _, Tvoidstar -> true
+    | Tstructp t1, Tstructp t2 -> t1.str_name = t2.str_name
     | _, _ -> false
 
 (* returns the field of a structure *)
 let get_str_field sname (fid : Ptree.ident) =
     let sfield = fid.id in
-    try let str = Hashtbl.find struct_map sname in
-        Hashtbl.find str.str_fields sfield
-    with Not_found ->
-        let message =
+    let str = Hashtbl.find struct_map sname in
+    if not (Hashtbl.mem str.str_fields sfield)
+        then let message =
             Printf.sprintf "variable \"%s\" does not contain field \"%s\"" sname fid.id
         in raise_error message fid.id_loc
-
+    else Hashtbl.find str.str_fields sfield
 
 (* verifies that the type of a parameter matches the
  * type of the argument *)
@@ -120,7 +119,8 @@ let rec get_expr (e : Ptree.expr) =
 and
 get_expr_const (e : Ptree.expr) =
     let Ptree.Econst i = e.expr_node in
-    {expr_node = Econst i; expr_typ = Tint}
+    let expr_type = if i = 0l then Ttypenull else Tint in
+    {expr_node = Econst i; expr_typ = expr_type}
 and
 get_expr_unop (e : Ptree.expr) =
     let Ptree.Eunop (op, e1) = e.expr_node in
@@ -153,13 +153,12 @@ get_expr_assign (e : Ptree.expr) =
             | Tstructp s ->
                 let sf = Hashtbl.find s.str_fields id.id in
                 if equiv_types e2.expr_typ sf.field_typ
-                then
-                    {
-                        expr_node = Eassign_field (e4,
-                        sf, e2);
-                        expr_typ = sf.field_typ
-                    }
-                else raise (Error "Invalid assignment")
+                    then
+                        {
+                            expr_node = Eassign_field (e4, sf, e2);
+                            expr_typ = sf.field_typ
+                        }
+                else raise_error  "Invalid assignment" id.id_loc
             | _ -> raise (Error "Undefined struct")
         end
 and
@@ -215,15 +214,16 @@ get_expr_right (e : Ptree.expr) =
     | Ptree.Larrow (e1, id) ->
             let e2 = get_expr e1 in
             begin
-                match e2.expr_node with
-                | Eaccess_local st_name -> 
-                        let st_field = get_str_field st_name id in
+                match e2.expr_typ with
+                | Tstructp struct_object ->
+                        let st_field =
+                            get_str_field struct_object.str_name id in
                         {
                             expr_node = Eaccess_field (e2, st_field);
                             expr_typ = st_field.field_typ
                         }
-                | _ -> raise (Error "Invalid expression")
-            end
+                | _ -> raise_error "Not a structure pointer" id.id_loc
+            end 
 and 
 get_expr_sizeof (e : Ptree.expr) =
     let Ptree.Esizeof id = e.expr_node in
@@ -262,9 +262,24 @@ let get_fun_body (dfun : Ptree.decl_fun) =
 
 let process_dfun (dfun : Ptree.decl_fun) =
     Hashtbl.clear !var_map;
-    let fun_type = get_fun_typ dfun in
     let fun_name = get_fun_name dfun in
+    let fun_type = get_fun_typ dfun in
+    if Hashtbl.mem fun_map fun_name
+        then raise_error "Already defined function" dfun.fun_name.id_loc
+        else
+    if Hashtbl.mem struct_map fun_name
+        then raise_error "Struct with the same name already defined"
+             dfun.fun_name.id_loc
+        else
     let fun_formals = get_fun_formals dfun in
+    let dummy_fun =
+        {
+            fun_typ = fun_type;
+            fun_name = fun_name;
+            fun_formals = fun_formals;
+            fun_body = ([], [])
+        } in
+    Hashtbl.add fun_map fun_name dummy_fun;
     let fun_body = get_fun_body dfun in
     let new_fun =
         {
@@ -274,10 +289,8 @@ let process_dfun (dfun : Ptree.decl_fun) =
             fun_body = fun_body;
         }
     in
-    try let _ = Hashtbl.find fun_map fun_name in
-        raise_error "Function already defined" dfun.fun_name.id_loc
-    with Not_found ->
-      Hashtbl.add fun_map new_fun.fun_name new_fun; new_fun
+    Hashtbl.add fun_map fun_name new_fun;
+    new_fun
 
 let process_dstr (dstr : Ptree.decl_struct) =
     let str_name, fields_list = dstr in
