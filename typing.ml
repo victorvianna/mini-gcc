@@ -36,7 +36,7 @@ let raise_error msg (l : Ptree.loc) =
     raise (Error msg)
 
 let add_fun_putchar () =
-    let fun_decl = 
+    let fun_decl =
         {
             fun_typ = Tint;
             fun_name = "putchar";
@@ -46,7 +46,7 @@ let add_fun_putchar () =
     Hashtbl.add fun_map "putchar" fun_decl
 
 let add_fun_sbrk () =
-    let fun_decl = 
+    let fun_decl =
         {
             fun_typ = Tvoidstar;
             fun_name = "sbrk";
@@ -64,8 +64,8 @@ let get_fun_typ (dfun : Ptree.decl_fun) : typ =
 let get_decl_var (decl: Ptree.decl_var) =
     match decl with
         | Ptree.Tint, i -> Tint, i
-        | Ptree.Tstructp st, i-> 
-                let st = 
+        | Ptree.Tstructp st, i->
+                let st =
                     try Hashtbl.find struct_map st.id
                     with Not_found -> raise_error "Undefined struct type"
                     st.id_loc
@@ -75,7 +75,7 @@ let get_decl_var (decl: Ptree.decl_var) =
 let get_decl_list (dlist : Ptree.decl_var list) =
     let rec aux acc var_set = function
         | [] -> List.rev acc
-        | decl :: tail -> 
+        | decl :: tail ->
                 let dvar = get_decl_var decl in
                 let var_typ = fst dvar in
                 let var_name = snd dvar in
@@ -85,7 +85,7 @@ let get_decl_list (dlist : Ptree.decl_var list) =
                 if Hashtbl.mem fun_map var_name.id
                     then raise_error "Function with same name exists"
                         var_name.id_loc
-                    else 
+                    else
                 if Hashtbl.mem struct_map var_name.id
                     then raise_error "Struct definition with same name exists"
                         var_name.id_loc
@@ -102,8 +102,8 @@ let get_fun_formals (dfun : Ptree.decl_fun) =
 let equiv_types t1 t2 = match t1, t2 with
     | Tint, Tint | Ttypenull, Ttypenull | Tvoidstar, Tvoidstar -> true
     | Tstructp t1, Tstructp t2 -> t1.str_name = t2.str_name
-    | Ttypenull, Tint | Tint, Ttypenull 
-    | Ttypenull, Tstructp _ | Tstructp _, Ttypenull 
+    | Ttypenull, Tint | Tint, Ttypenull
+    | Ttypenull, Tstructp _ | Tstructp _, Ttypenull
     | Tvoidstar, Tstructp _ | Tstructp _, Tvoidstar -> true
     | _, _ -> false
 
@@ -176,7 +176,7 @@ and
 get_expr_binop (e : Ptree.expr) =
     let Ptree.Ebinop(bop, _e1, _e2) = e.expr_node in
     match bop with
-    | Beq | Bneq | Blt | Ble | Bgt| Bge -> 
+    | Beq | Bneq | Blt | Ble | Bgt| Bge ->
         let e1 = get_expr _e1 in
         let e2 = get_expr _e2 in
         if equiv_types e1.expr_typ e2.expr_typ
@@ -186,9 +186,9 @@ get_expr_binop (e : Ptree.expr) =
         let e1 = get_expr _e1 in
         let e2 = get_expr _e2 in
         if equiv_types e1.expr_typ Tint && equiv_types e2.expr_typ Tint
-        then {expr_node = Ebinop (bop, e1, e2); expr_typ = Tint} 
+        then {expr_node = Ebinop (bop, e1, e2); expr_typ = Tint}
         else raise (Error "Wrong operand types")
-    | Band | Bor -> 
+    | Band | Bor ->
         let e1 = get_expr _e1 in
         let e2 = get_expr _e2 in
         {expr_node = Ebinop (bop, e1, e2); expr_typ = Tint}
@@ -196,7 +196,7 @@ and
 get_expr_call (e : Ptree.expr) =
     let Ptree.Ecall (id, elist) = e.expr_node in
     let fdecl_fun =
-        try Hashtbl.find fun_map id.id 
+        try Hashtbl.find fun_map id.id
         with Not_found -> raise_error (Printf.sprintf "Undefined function \"%s\""
         id.id) id.id_loc
     in
@@ -216,11 +216,11 @@ and
 get_expr_right (e : Ptree.expr) =
     let Ptree.Eright l = e.expr_node in
     match l with
-    | Ptree.Lident id -> 
+    | Ptree.Lident id ->
             begin
             try let var = Hashtbl.find !var_map id.id in
                 {expr_node = Eaccess_local id.id; expr_typ = fst var}
-            with 
+            with
                 Not_found ->
                     try let str = Hashtbl.find struct_map id.id in
                     {expr_node = Eaccess_local id.id; expr_typ = Tstructp str}
@@ -238,13 +238,13 @@ get_expr_right (e : Ptree.expr) =
                             expr_typ = st_field.field_typ
                         }
                 | _ -> raise_error "Not a structure pointer" id.id_loc
-            end 
-and 
+            end
+and
 get_expr_sizeof (e : Ptree.expr) =
     let Ptree.Esizeof id = e.expr_node in
     let st = Hashtbl.find struct_map id.id in
     {expr_node = Esizeof st; expr_typ = Tint}
-    
+
 
 let rec get_stmt (stmt : Ptree.stmt) =
     match stmt.stmt_node with
@@ -270,7 +270,7 @@ get_stmt_list (stmts : Ptree.stmt list) =
         | stmt :: tail -> aux ((get_stmt stmt) :: acc) tail
     in
     aux [] stmts
-    
+
 
 let get_fun_body (dfun : Ptree.decl_fun) =
     get_block dfun.fun_body
@@ -315,7 +315,7 @@ let process_dstr (dstr : Ptree.decl_struct) =
     if Hashtbl.mem fun_map str_name.id
         then raise_error "Function with same name already defined"
         str_name.id_loc
-        else 
+        else
     let htbl = Hashtbl.create (List.length fields_list) in
     let str = {str_name = str_name.id; str_fields = htbl} in
     Hashtbl.add struct_map str_name.id str;
@@ -330,11 +330,11 @@ let process_dstr (dstr : Ptree.decl_struct) =
         if Hashtbl.mem htbl id.id
             then raise_error "Variable already defined"
                 id.id_loc
-            else 
+            else
         Hashtbl.add htbl id.id {field_name = id.id; field_typ = (translate_type t)} in
     List.iter add_decl_var_to_htbl fields_list
 
-let program p = 
+let program p =
     add_fun_sbrk ();
     add_fun_putchar();
     let rec aux acc = function
