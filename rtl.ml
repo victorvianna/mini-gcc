@@ -181,6 +181,8 @@ let deffun (f:Ttree.decl_fun) =
   }
   in
   Hashtbl.add get_fun_info f.fun_name fun_info;
+  let fun_formals = List.map allocate_variable f.fun_formals in
+  let fun_locals = Register.S.of_list ((function (d, s) -> List.map allocate_variable d) f.fun_body) in
   (* calculate graph for function body *)
   let fun_entry = stmt (Ttree.Sblock(f.fun_body)) l r l in
   {
@@ -188,9 +190,9 @@ let deffun (f:Ttree.decl_fun) =
     fun_result = r;
     fun_exit = l;
     fun_entry = fun_entry;
-    fun_formals = [];
-    fun_locals = Register.S.empty; (* TODO: use this field *)
-    fun_body = !graph; (* TODO: is this line ok? since graph will change *)
+    fun_formals = fun_formals;
+    fun_locals = fun_locals;
+    fun_body = !graph;
   }
 
 let program (ttree:Ttree.file) =
