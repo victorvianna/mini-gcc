@@ -46,7 +46,7 @@ let get_decl_var (decl: Ptree.decl_var) =
         | Ptree.Tstructp st, i-> 
                 let st = 
                     try Hashtbl.find struct_map st.id
-                    with Not_found -> raise_error "undefined struct type"
+                    with Not_found -> raise_error "Undefined struct type"
                     st.id_loc
                 in
                 Tstructp st, i
@@ -281,21 +281,30 @@ let process_dfun (dfun : Ptree.decl_fun) =
 
 let process_dstr (dstr : Ptree.decl_struct) =
     let str_name, fields_list = dstr in
+    if Hashtbl.mem struct_map str_name.id
+        then raise_error "Struct already defined" str_name.id_loc
+        else
+    if Hashtbl.mem fun_map str_name.id
+        then raise_error "Function with same name already defined"
+        str_name.id_loc
+        else 
     let htbl = Hashtbl.create (List.length fields_list) in
+    let str = {str_name = str_name.id; str_fields = htbl} in
+    Hashtbl.add struct_map str_name.id str;
     let translate_type (t : Ptree.typ) =
         match t with
         | Ptree.Tint -> Tint
-        | Ptree.Tstructp id -> Tstructp (Hashtbl.find struct_map id.id) in
+        | Ptree.Tstructp id ->
+                if Hashtbl.mem struct_map id.id
+                    then Tstructp (Hashtbl.find struct_map id.id)
+                    else raise_error "Undefined structure" id.id_loc in
     let add_decl_var_to_htbl (t, id : Ptree.typ * Ptree.ident) =
-        try let _ = Hashtbl.find htbl id.id in
-            raise_error "Variable already defined" id.id_loc
-        with Not_found -> Hashtbl.add htbl id.id {field_name = id.id; field_typ = (translate_type t)} in
-    List.iter add_decl_var_to_htbl fields_list;
-    try let _ = Hashtbl.find struct_map str_name.id in
-        raise_error "Struct already defined" str_name.id_loc
-    with Not_found ->
-      Hashtbl.add struct_map str_name.id {str_name = str_name.id; str_fields =
-          htbl}
+        if Hashtbl.mem htbl id.id
+            then raise_error "Variable already defined"
+                id.id_loc
+            else 
+        Hashtbl.add htbl id.id {field_name = id.id; field_typ = (translate_type t)} in
+    List.iter add_decl_var_to_htbl fields_list
 
 let program p = 
     let rec aux acc = function
