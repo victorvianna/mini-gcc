@@ -79,12 +79,11 @@ let get_fun_formals (dfun : Ptree.decl_fun) =
     get_decl_list dfun.fun_formals
 
 let equiv_types t1 t2 = match t1, t2 with
-    | Tint, Tint -> true
-    | Ttypenull, _ -> if t2 = Tvoidstar then false else true
-    | _, Ttypenull -> if t1 = Tvoidstar then false else true
-    | Tvoidstar, Tstructp _ -> true
-    | Tstructp _, Tvoidstar -> true
+    | Tint, Tint | Ttypenull, Ttypenull | Tvoidstar, Tvoidstar -> true
     | Tstructp t1, Tstructp t2 -> t1.str_name = t2.str_name
+    | Ttypenull, Tint | Tint, Ttypenull 
+    | Ttypenull, Tstructp _ | Tstructp _, Ttypenull 
+    | Tvoidstar, Tstructp _ | Tstructp _, Tvoidstar -> true
     | _, _ -> false
 
 (* returns the field of a structure *)
@@ -96,15 +95,6 @@ let get_str_field sname (fid : Ptree.ident) =
             Printf.sprintf "variable \"%s\" does not contain field \"%s\"" sname fid.id
         in raise_error message fid.id_loc
     else Hashtbl.find str.str_fields sfield
-
-(* verifies that the type of a parameter matches the
- * type of the argument *)
-let equiv_arg_types ftype atype =
-    match ftype, atype with
-    | Tint, Tint | Tint, Ttypenull -> true
-    | Tstructp expected_st, Tstructp actual_st ->
-            if expected_st.str_name = actual_st.str_name then true else false
-    | _ -> false
 
 (* continuar *)
 let rec get_expr (e : Ptree.expr) =
@@ -191,12 +181,12 @@ get_expr_call (e : Ptree.expr) =
     let rec valid_arg_type flist alist =
         match flist, alist with
             | [], [] -> true
-            | x::xs, y::ys -> equiv_arg_types x y && valid_arg_type xs ys
+            | x::xs, y::ys -> equiv_types x y && valid_arg_type xs ys
             | _ -> raise (Error "Wrong number of arguments")
     in
     if valid_arg_type formals_types args_types
     then {expr_node = Ecall (id.id, args); expr_typ = fdecl_fun.fun_typ}
-    else raise (Error "Invalid argument type")
+    else raise_error "Invalid argument type" id.id_loc
 and
 get_expr_right (e : Ptree.expr) =
     let Ptree.Eright l = e.expr_node in
