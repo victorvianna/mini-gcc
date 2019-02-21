@@ -3,6 +3,7 @@ open Ttree
 (* utiliser cette exception pour signaler une erreur de typage *)
 exception Error of string
 
+(* contains the set of defined local variables *)
 module StringSet = Set.Make(String)
 
 let struct_map = Hashtbl.create 10 (* Ttree.ident -> Ttree.structure *)
@@ -33,6 +34,26 @@ let get_error_message msg l =
 let raise_error msg (l : Ptree.loc) =
     let msg = get_error_message msg l in
     raise (Error msg)
+
+let add_fun_putchar () =
+    let fun_decl = 
+        {
+            fun_typ = Tint;
+            fun_name = "putchar";
+            fun_formals = [Tint, "c"];
+            fun_body = [], [];
+        } in
+    Hashtbl.add fun_map "putchar" fun_decl
+
+let add_fun_sbrk () =
+    let fun_decl = 
+        {
+            fun_typ = Tvoidstar;
+            fun_name = "sbrk";
+            fun_formals = [Tint, "n"];
+            fun_body = [], [];
+        } in
+    Hashtbl.add fun_map "sbrk" fun_decl
 
 let get_fun_typ (dfun : Ptree.decl_fun) : typ =
     match (dfun.fun_typ : Ptree.typ) with
@@ -174,7 +195,11 @@ get_expr_binop (e : Ptree.expr) =
 and
 get_expr_call (e : Ptree.expr) =
     let Ptree.Ecall (id, elist) = e.expr_node in
-    let fdecl_fun = Hashtbl.find fun_map id.id in
+    let fdecl_fun =
+        try Hashtbl.find fun_map id.id 
+        with Not_found -> raise_error (Printf.sprintf "Undefined function \"%s\""
+        id.id) id.id_loc
+    in
     let formals_types = List.map fst fdecl_fun.fun_formals in
     let args = List.map get_expr elist in
     let args_types = List.map (fun x -> x.expr_typ) args in
@@ -310,6 +335,8 @@ let process_dstr (dstr : Ptree.decl_struct) =
     List.iter add_decl_var_to_htbl fields_list
 
 let program p = 
+    add_fun_sbrk ();
+    add_fun_putchar();
     let rec aux acc = function
         | [] -> List.rev acc
         | Ptree.Dfun dfun :: tail -> aux (process_dfun dfun :: acc) tail
