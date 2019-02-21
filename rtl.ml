@@ -67,16 +67,16 @@ expr (e:Ttree.expr) (destr:register) (destl:label) : label = match e.expr_node w
       (* if e1 is false, result is e1 and we proceed to destl directly;
       otherwise result is e2, we calculate it then go to destl;
       we use test jz because FALSE is the significative value for && *)
-      let calculate_second = expr e2 destr destl in
+      let calculate_second = expr e1 destr destl in
       let testl = generate (Emubranch (Mjz, destr, destl, calculate_second)) in
-      expr e1 destr testl
+      expr e2 destr testl
       | Bor ->
       (* if e1 is true, result is e1 and we proceed to destl directly;
       otherwise result is e2, we calculate it then go to destl;
       we use test jnz because TRUE is the significative value for || *)
-      let calculate_second = expr e2 destr destl in
+      let calculate_second = expr e1 destr destl in
       let testl = generate (Emubranch (Mjnz, destr, destl, calculate_second)) in
-      expr e1 destr testl
+      expr e2 destr testl
     end
   | Ttree.Eunop (op, e)  ->
     begin
