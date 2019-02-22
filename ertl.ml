@@ -113,7 +113,7 @@ let generate_get_arguments first_instr fun_locals =
                     in aux new_instr (cnt + 1) tl
                 else
                     let shift = (2 + cnt - n_hw_registers) * word_size in
-                    let new_inst = 
+                    let new_inst =
                         Eload (Register.rbp, shift, x, l)
                     in aux new_inst (cnt + 1) tl
     in aux first_instr 0 fun_locals
@@ -172,3 +172,48 @@ let translate_fun (f : Rtltree.deffun) =
 
 let program (rtltree : Rtltree.file) : file =
   {funs = List.map translate_fun rtltree.funs}
+
+(************ LIVENESS  ************)
+open Format
+
+type live_info = {
+  instr: Ertltree.instr;
+  succ: Label.t list;    (* successeurs *)
+  mutable pred: Label.set;       (* prédécesseurs *)
+  defs: Register.set;    (* définitions *)
+  uses: Register.set;    (* utilisations *)
+  mutable  ins: Register.set;    (* variables vivantes en entrée *)
+  mutable outs: Register.set;    (* variables vivantes en sortie *)
+}
+
+
+let liveness (g:cfg) : live_info Label.map =
+  let (all_info:live_info Label.map) = Label.M.empty in
+  (* 1.basic filling of info table *)
+  let all_labels = Seq.map (function (k, v) -> k) (Label.M.to_seq g) in
+  let dfs (entry:label) : unit =
+     let add_info (l:label) (i:instr) :unit =
+        let (def, use) = def_use i in
+        let info = {
+          instr = i;
+          succ = succ(i);
+          pred = Label.S.empty;
+          defs = Register.S.of_list def;
+          uses = Register.S.of_list use;
+          ins = Register.S.empty;
+          outs = Register.S.empty
+        } in
+        Label.M.add l info all_info;
+        ()
+    in
+    if not (Label.M.mem entry all_info) (* do not visit more than once *)
+    then visit add_info g entry
+  in
+  Seq.iter dfs all_labels; (* graph may be disconnected *)
+  all_info
+
+let print_set = Register.print_set
+
+let print_live_info fmt (li:live_info) =
+  fprintf fmt "d={%a}@ u={%a}@ i={%a}@ o={%a}"
+    print_set li.defs print_set li.uses print_set li.ins print_set li.outs
