@@ -210,6 +210,16 @@ let liveness (g:cfg) : live_info Label.map =
     then visit add_info g entry
   in
   Seq.iter dfs all_labels; (* graph may be disconnected *)
+  (* 2.fill pred field, i.e., use reverse edges *)
+  let add_pred pred succ =
+    let info_succ = Label.M.find succ all_info in
+    Label.S.add pred info_succ.pred;
+    ()
+  in
+  let add_all_pred pred pred_info =
+    List.iter (add_pred pred) pred_info.succ
+  in
+  Label.M.iter add_all_pred all_info;
   all_info
 
 let print_set = Register.print_set
