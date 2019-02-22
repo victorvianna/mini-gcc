@@ -187,14 +187,14 @@ type live_info = {
 }
 
 
-let liveness (g:cfg) : live_info Label.map =
-  let (all_info:live_info Label.map) = Label.M.empty in
-  let get_info l = Label.M.find l all_info in
+let liveness (g:cfg)  =
+  let all_info = (Hashtbl.create 10 : (label, live_info) Hashtbl.t) in
+  let get_info l = Hashtbl.find all_info l in
   (* 1.basic filling of info table *)
   let all_labels = List.of_seq (Seq.map (function (k, v) -> k) (Label.M.to_seq g)) in
   let dfs (entry:label) : unit =
-     let add_info (l:label) (i:instr) :unit =
-        let (def, use) = def_use i in
+    let add_info (l:label) (i:instr) :unit =
+      let (def, use) = def_use i in
         let info = {
           instr = i;
           succ = succ(i);
@@ -203,24 +203,24 @@ let liveness (g:cfg) : live_info Label.map =
           uses = Register.S.of_list use;
           ins = Register.S.empty;
           outs = Register.S.empty
-        } in
-        Label.M.add l info all_info;
-        ()
-    in
-    if not (Label.M.mem entry all_info) (* do not visit more than once *)
+          } in
+          Hashtbl.add all_info l info;
+          ()
+          in
+    if not (Hashtbl.mem all_info entry) (* do not visit more than once *)
     then visit add_info g entry
   in
   List.iter dfs all_labels; (* graph may be disconnected *)
   (* 2.fill pred field, i.e., use reverse edges *)
   let add_pred pred succ =
     let info_succ = get_info succ in
-    Label.S.add pred info_succ.pred;
+    info_succ.pred <- Label.S.add pred info_succ.pred;
     ()
   in
   let add_all_pred pred pred_info =
     List.iter (add_pred pred) pred_info.succ
   in
-  Label.M.iter add_all_pred all_info;
+  Hashtbl.iter add_all_pred all_info;
   (* 3. Kildall's algorithm *)
   let update_in_outs l =
     let info = get_info l in
@@ -250,3 +250,15 @@ let print_set = Register.print_set
 let print_live_info fmt (li:live_info) =
   fprintf fmt "d={%a}@ u={%a}@ i={%a}@ o={%a}"
     print_set li.defs print_set li.uses print_set li.ins print_set li.outs
+
+let calculate_and_print_liveness fmt p =
+  let all_info = liveness !graph in
+  let print_deffun_liveness fmt f =
+    visit (fun l i ->
+    let li = Hashtbl.find all_info l in
+    fprintf fmt "%a: %a %a@\n"
+    Label.print l print_instr i print_live_info li) f.fun_body f.fun_entry;
+    ()
+  in
+  fprintf fmt "=== LIVENESS =============================================@\n";
+  List.iter (print_deffun_liveness fmt) p.funs
