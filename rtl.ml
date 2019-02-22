@@ -27,8 +27,8 @@ let allocate_variable (decl_var:Ttree.decl_var) =
   attribute_register decl_var r;
   r
 
-(* function to (deterministically) get the displacement of a field in memo *)
-let get_displacement (stru:Ttree.structure) (field:Ttree.field) =
+(* function to (deterministically) an id for a field in a structure *)
+let get_field_index (stru:Ttree.structure) (field:Ttree.field) =
   let index_of e l =
     let rec index_rec i = function
       | [] -> raise Not_found
@@ -101,9 +101,9 @@ expr (e:Ttree.expr) (destr:register) (destl:label) : label = match e.expr_node w
   | Ttree.Eaccess_field (e, f) ->
   begin
     match e.expr_typ with (Tstructp stru) ->
-    let displacement = get_displacement stru f in
+    let field_index = get_field_index stru f in
     let r_address = Register.fresh () in
-    let destl = generate (Eload (r_address, displacement, destr, destl)) in
+    let destl = generate (Eload (r_address, field_index * Memory.word_size, destr, destl)) in
     expr e r_address destl
   end
   | Ttree.Eassign_local (name, e) ->
@@ -117,9 +117,9 @@ expr (e:Ttree.expr) (destr:register) (destl:label) : label = match e.expr_node w
   | Ttree.Eassign_field (e_address, f, e_value) ->
   begin
     match e_address.expr_typ with (Tstructp stru) ->
-    let displacement = get_displacement stru f in
+    let field_index = get_field_index stru f in
     let r_address = Register.fresh () in
-    let destl = generate (Estore (destr, r_address, displacement, destl)) in
+    let destl = generate (Estore (destr, r_address, field_index * Memory.word_size, destl)) in
     let destl = expr e_value destr destl in
     expr e_address r_address destl
   end
