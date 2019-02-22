@@ -154,7 +154,7 @@ let rec stmt (s:Ttree.stmt) destl retr exitl = match s with
     (* backup original variable registers *)
     let ancient_get_var_info = Hashtbl.copy !get_var_info in
     List.map allocate_variable decl_var_list;
-    let entry = List.fold_right (fun s l -> stmt s l retr l ) stmt_list destl in (* retr is not used in this case*)
+    let entry = List.fold_right (fun s l -> stmt s l retr exitl ) stmt_list destl in (* retr is not used in this case*)
     (* restore original variable registers *)
     get_var_info := ancient_get_var_info;
     entry
