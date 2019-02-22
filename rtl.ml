@@ -36,8 +36,8 @@ let get_displacement (stru:Ttree.structure) (field:Ttree.field) =
     in
     index_rec 0 l
   in
-  let fields_list = Hashtbl.fold (fun k v acc -> v :: acc) stru.str_fields [] in
-  index_of field fields_list
+  let fields_list = Hashtbl.fold (fun k (v:Ttree.field) acc -> v.field_name :: acc) stru.str_fields [] in
+  index_of field.field_name fields_list
 
 let rec naive_apply_binop op (e1:Ttree.expr) (e2:Ttree.expr) destr destl =
   let r = Register.fresh () in
