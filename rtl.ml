@@ -140,6 +140,9 @@ expr (e:Ttree.expr) (destr:register) (destl:label) : label = match e.expr_node w
   get_var_info := ancient_get_var_info;
   let entry = List.fold_right calculate_argument combined_list destl in
   entry
+  | Ttree.Esizeof structure ->
+    let num_words = Int32.of_int ((Hashtbl.length structure.str_fields) * Memory.word_size) in
+    generate (Econst(num_words, destr, destl))
 
 let rec stmt (s:Ttree.stmt) destl retr exitl = match s with
   | Ttree.Sreturn e ->
