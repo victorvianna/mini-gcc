@@ -189,8 +189,9 @@ type live_info = {
 
 let liveness (g:cfg) : live_info Label.map =
   let (all_info:live_info Label.map) = Label.M.empty in
+  let get_info l = Label.M.find l all_info in
   (* 1.basic filling of info table *)
-  let all_labels = Seq.map (function (k, v) -> k) (Label.M.to_seq g) in
+  let all_labels = List.of_seq (Seq.map (function (k, v) -> k) (Label.M.to_seq g)) in
   let dfs (entry:label) : unit =
      let add_info (l:label) (i:instr) :unit =
         let (def, use) = def_use i in
@@ -209,10 +210,10 @@ let liveness (g:cfg) : live_info Label.map =
     if not (Label.M.mem entry all_info) (* do not visit more than once *)
     then visit add_info g entry
   in
-  Seq.iter dfs all_labels; (* graph may be disconnected *)
+  List.iter dfs all_labels; (* graph may be disconnected *)
   (* 2.fill pred field, i.e., use reverse edges *)
   let add_pred pred succ =
-    let info_succ = Label.M.find succ all_info in
+    let info_succ = get_info succ in
     Label.S.add pred info_succ.pred;
     ()
   in
@@ -220,6 +221,28 @@ let liveness (g:cfg) : live_info Label.map =
     List.iter (add_pred pred) pred_info.succ
   in
   Label.M.iter add_all_pred all_info;
+  (* 3. Kildall's algorithm *)
+  let update_in_outs l =
+    let info = get_info l in
+    info.outs <- List.fold_left (fun ins succ -> Register.S.union ins (get_info succ).ins) Register.S.empty info.succ;
+    info.ins <- Register.S.union info.uses (Register.S.diff info.outs info.defs)
+  in
+  let rec kildall ws :unit=
+    if(not (Label.S.is_empty ws)) then
+    begin
+        let l = Label.S.choose ws in
+        let tail = Label.S.remove l ws in
+        let info = get_info l in
+        let old_in = info.ins in
+        update_in_outs l;
+        if Register.S.equal old_in info.ins
+        then kildall tail
+        else kildall (Label.S.union info.pred tail)
+    end
+    else
+        ()
+  in
+  kildall (Label.S.of_list all_labels);
   all_info
 
 let print_set = Register.print_set
