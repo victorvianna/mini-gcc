@@ -169,9 +169,11 @@ let rec stmt (s:Ttree.stmt) destl retr exitl = match s with
   | Ttree.Swhile (e, s) ->
   let r_check = Register.fresh() in
   let gobackl = Label.fresh () in
-  let testl = generate (Emubranch (Mjnz, r_check, gobackl, destl)) in
+  let stmtl = stmt s gobackl retr exitl in
+  let branchl = generate (Emubranch (Mjnz, r_check, stmtl, destl)) in
+  let testl = expr e r_check branchl in
   graph := Label.M.add gobackl (Egoto(testl)) !graph;
-  expr e r_check testl
+  testl
 
 let deffun (f:Ttree.decl_fun) =
   let r = Register.fresh () in
@@ -200,6 +202,5 @@ let deffun (f:Ttree.decl_fun) =
 
 let program (ttree:Ttree.file) =
   {funs = List.map deffun ttree.funs}
-
 
 
