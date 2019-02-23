@@ -67,15 +67,17 @@ expr (e:Ttree.expr) (destr:register) (destl:label) : label = match e.expr_node w
       (* if e1 is false, result is e1 and we proceed to destl directly;
       otherwise result is e2, we calculate it then go to destl;
       we use test jz because FALSE is the significative value for && *)
-      let calculate_second = expr e1 destr destl in
-      let testl = generate (Emubranch (Mjz, destr, destl, calculate_second)) in
+      let normalize = generate(Emunop(Msetnei Int32.zero, destr, destl)) in
+      let calculate_second = expr e1 destr normalize in
+      let testl = generate (Emubranch (Mjz, destr, normalize, calculate_second)) in
       expr e2 destr testl
       | Bor ->
-      (* if e1 is true, result is e1 and we proceed to destl directly;
-      otherwise result is e2, we calculate it then go to destl;
+      (* if e1 is true, result is e1 and we proceed to normalize directly;
+      otherwise result is e2, we calculate it then go to normalize;
       we use test jnz because TRUE is the significative value for || *)
-      let calculate_second = expr e1 destr destl in
-      let testl = generate (Emubranch (Mjnz, destr, destl, calculate_second)) in
+      let normalize = generate(Emunop(Msetnei Int32.zero, destr, destl)) in
+      let calculate_second = expr e1 destr normalize in
+      let testl = generate (Emubranch (Mjnz, destr, normalize, calculate_second)) in
       expr e2 destr testl
     end
   | Ttree.Eunop (op, e)  ->
@@ -85,11 +87,7 @@ expr (e:Ttree.expr) (destr:register) (destl:label) : label = match e.expr_node w
       let (zero_expr:Ttree.expr) = {expr_typ = Ttree.Tint; expr_node = (Ttree.Econst Int32.zero)} in
       naive_apply_binop Msub zero_expr e destr destl
       | Unot ->
-      (* TODO: avoid overflow and optimize  *)
-      let (zero_expr:Ttree.expr) = {expr_typ = Ttree.Tint; expr_node = (Ttree.Econst Int32.zero)} in
-      let sub_one = Ops.Maddi (Int32.of_int (-1)) in
-      let destl = generate (Emunop (sub_one, destr, destl)) in
-      let destl = naive_apply_binop Msub zero_expr e destr destl in
+      let destl = generate(Emunop(Msetei Int32.zero, destr, destl)) in
       expr e destr destl
     end
   | Ttree.Eaccess_local name ->
