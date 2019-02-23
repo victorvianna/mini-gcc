@@ -81,6 +81,39 @@ let succ = function
     | Rtltree.Embbranch (_, _, _, l1, l2)
         -> [l1; l2]
 
+let generate_alloc_frame first_instr =
+    let l = generate first_instr in
+    Ealloc_frame l
+
+let generate_save_callee_saved first_instr =
+    let rec aux instr = function
+        | [] -> instr
+        | x :: tl ->
+                let l = generate first_instr in
+                aux (Epush_param (x, l)) tl
+    in aux first_instr (List.rev Register.callee_saved)
+
+let generate_get_arguments first_instr fun_locals =
+    let n_hw_registers = List.length Register.parameters in
+    let word_size = 8 in
+    let rec aux instr cnt = function
+        | [] -> instr
+        | x :: tl ->
+                let l = generate instr in
+                if cnt = n_hw_registers - 1 then
+                    let new_instr =
+                        Embinop (Mmov, List.nth Register.parameters cnt, x, l)
+                    in aux new_instr (cnt + 1) (List.rev tl)
+                else if cnt < n_hw_registers then
+                    let new_instr =
+                        Embinop (Mmov, List.nth Register.parameters cnt, x, l)
+                    in aux new_instr (cnt + 1) tl
+                else
+                    let shift = (2 + cnt - n_hw_registers) * word_size in
+                    let new_inst = 
+                        Eload (Register.rbp, shift, x, l)
+                    in aux new_inst (cnt + 1) tl
+    in aux first_instr 0 fun_locals
 
 let translate_fun (f : Rtltree.deffun) =
     let fun_name = f.fun_name in
@@ -104,6 +137,11 @@ let translate_fun (f : Rtltree.deffun) =
     let () = visit (fun l rtl_instr ->
         let ertl_instr = instr rtl_instr in
         graph := Label.M.add l ertl_instr !graph) f.fun_body fun_entry in
+    let first_instr = Label.M.find fun_entry !graph in
+    let first_instr = generate_get_arguments first_instr f.fun_formals in
+    let first_instr = generate_save_callee_saved first_instr in
+    let first_instr = generate_alloc_frame first_instr in
+    let () = graph := Label.M.add fun_entry first_instr !graph in
     {
         fun_name = fun_name;
         fun_formals = fun_formals;
