@@ -35,6 +35,38 @@ end
   Embbranch (mbbranch, r1, r2, l1, l2)
 | Rtltree.Egoto (destl) ->
   Egoto (destl)
+| Rtltree.Ecall (r, f, rl, l) ->
+    let n_hw_registers = List.length Register.parameters in
+    let n_regs_stack = max (List.length rl - n_hw_registers) 0 in
+    let word_size = 8 in
+    let rec move_registers cnt destl ertl_instr =
+        begin function
+        | [] -> ertl_instr
+        | x :: tail ->
+            let new_l = generate ertl_instr in
+            if cnt = n_hw_registers - 1 then
+                let new_inst =
+                    Embinop (Mmov, x, List.nth Register.parameters cnt, new_l)
+                in move_registers (cnt + 1) new_l new_inst (List.rev tail)
+            else if cnt < n_hw_registers then
+                let new_inst =
+                    Embinop (Mmov, x, List.nth Register.parameters cnt, new_l)
+                in move_registers (cnt + 1) new_l new_inst tail
+            else
+                let new_inst = Epush_param (x, new_l)
+                in move_registers (cnt + 1) new_l new_inst tail
+        end in
+    (* pop parameters passed on the stack *)
+    let l = if n_regs_stack > 0 then
+        let shift = n_regs_stack * word_size in
+        generate (Emunop (Maddi (Int32.of_int shift), Register.rsp, l))
+        else l in
+    (* move return value to register r *)
+    let l = generate (Embinop (Mmov, Register.result, r, l)) in
+    (* call function *)
+    let call_instr = Ecall (f, List.length rl - n_regs_stack, l) in
+    move_registers 0 l call_instr rl
+
 
 let succ = function
     | Rtltree.Econst (_, _, l)
