@@ -68,7 +68,7 @@ end
     move_registers 0 l call_instr rl
 
 
-let succ = function
+let _succ = function
     | Rtltree.Econst (_, _, l)
     | Rtltree.Eload (_, _, _, l)
     | Rtltree.Estore (_, _, _, l)
@@ -148,7 +148,7 @@ let translate_fun (f : Rtltree.deffun) =
             let () = Hashtbl.add visited l () in
             let i = Label.M.find l g in
             let () = f l i in
-            List.iter visit (succ i)
+            List.iter visit (_succ i)
         in
         visit entry in
     let () = visit (fun l rtl_instr ->
