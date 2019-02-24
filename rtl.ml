@@ -7,24 +7,14 @@ let generate i =
   graph := Label.M.add l i !graph;
   l
 
-(* table for local variable access: gets register and type  *)
-type var_info = register * (Ttree.typ)
-let get_var_info = ref (Hashtbl.create 10 : (string, var_info) Hashtbl.t)
+(* get register bound to a variable name  *)
+let get_var_register = ref (Hashtbl.create 10 : (Ttree.ident, register) Hashtbl.t)
 
-(* table for function info access *)
-type fun_info = {
-  args: Ttree.decl_var list
-}
-let get_fun_info = (Hashtbl.create 10 : (string, fun_info) Hashtbl.t)
-
-(* attribute register to certain identifier *)
-let attribute_register (decl_var:Ttree.decl_var) register = match decl_var with
-  (typ, name) -> Hashtbl.add !get_var_info name (register,typ)
-
-(* allocate register when variable is declared, return register used *)
+(* allocate and bind register to a declared variable, return register used *)
 let allocate_variable (decl_var:Ttree.decl_var) =
   let r = Register.fresh () in
-  attribute_register decl_var r;
+  let (_, name) = decl_var in
+  Hashtbl.add !get_var_register name r;
   r
 
 (* function to (deterministically) an id for a field in a structure *)
@@ -91,11 +81,8 @@ expr (e:Ttree.expr) (destr:register) (destl:label) : label = match e.expr_node w
       expr e destr destl
     end
   | Ttree.Eaccess_local name ->
-  begin
-    let (v:var_info) = Hashtbl.find !get_var_info name in
-    match v with
-    | (r, _) -> generate (Embinop (Mmov, r, destr, destl))
-  end
+    let r = Hashtbl.find !get_var_register name in
+    generate (Embinop (Mmov, r, destr, destl))
   | Ttree.Eaccess_field (e, f) ->
   begin
     match e.expr_typ with (Tstructp stru) ->
@@ -105,13 +92,10 @@ expr (e:Ttree.expr) (destr:register) (destl:label) : label = match e.expr_node w
     expr e r_address destl
   end
   | Ttree.Eassign_local (name, e) ->
-  begin
-    let (v:var_info) = Hashtbl.find !get_var_info name in
-    match v with
-    | (r, _) ->
-    let destl = generate (Embinop(Mmov, r, destr, destl)) in (* assignment has same value as assigned *)
+    let r = Hashtbl.find !get_var_register name in
+    (* assignment must have the same value as assigned *)
+    let destl = generate (Embinop(Mmov, r, destr, destl)) in
     expr e r destl;
-  end
   | Ttree.Eassign_field (e_address, f, e_value) ->
   begin
     match e_address.expr_typ with (Tstructp stru) ->
@@ -122,20 +106,14 @@ expr (e:Ttree.expr) (destr:register) (destl:label) : label = match e.expr_node w
     expr e_address r_address destl
   end
   | Ttree.Ecall (name, expr_list) ->
-  (* backup original variable registers *)
-  let ancient_get_var_info = Hashtbl.copy !get_var_info in
-  (* associate registers with argument names  *)
-  let (fun_info:fun_info) = Hashtbl.find get_fun_info name in
-  let new_registers = List.map allocate_variable fun_info.args in
+  let new_registers = List.map (fun _ -> Register.fresh ()) expr_list in
   (* generate call *)
   let destl = generate (Ecall (destr, name, new_registers, destl)) in
-  (* store calculated arguments in new registers *)
   let combined_list = List.combine expr_list new_registers in
   let calculate_argument pair l = match pair with
-    (e,r) -> expr e r l
+  (e,r) -> expr e r l
   in
-  (* restore original variable registers *)
-  get_var_info := ancient_get_var_info;
+  (* calculate expressions passed, store them in newly-allocated registers *)
   let entry = List.fold_right calculate_argument combined_list destl in
   entry
   | Ttree.Esizeof structure ->
@@ -148,15 +126,13 @@ let rec stmt (s:Ttree.stmt) destl retr exitl = match s with
   | Ttree.Sexpr e ->
     expr e retr destl
   | Ttree.Sblock (decl_var_list, stmt_list) ->
-  begin
-    (* backup original variable registers *)
-    let ancient_get_var_info = Hashtbl.copy !get_var_info in
+    (* backup original variable-register bindings *)
+    let ancient_get_var_register = Hashtbl.copy !get_var_register in
     List.map allocate_variable decl_var_list;
-    let entry = List.fold_right (fun s l -> stmt s l retr exitl ) stmt_list destl in (* retr is not used in this case*)
-    (* restore original variable registers *)
-    get_var_info := ancient_get_var_info;
+    let entry = List.fold_right (fun s l -> stmt s l retr exitl ) stmt_list destl in
+    (* restore original variable-register bindings *)
+    get_var_register := ancient_get_var_register;
     entry
-  end
   | Ttree.Sskip -> destl
   | Ttree.Sif (e, s1, s2) ->
   let truel = stmt s1 destl retr exitl in
@@ -179,15 +155,14 @@ let deffun (f:Ttree.decl_fun) =
   let get_name decl_var = match decl_var with
     (_, name) -> name
   in
-  let fun_info = {
-    args = f.fun_formals
-  }
-  in
-  Hashtbl.add get_fun_info f.fun_name fun_info;
+  (* bind registers for function arguments and local variables *)
   let fun_formals = List.map allocate_variable f.fun_formals in
-  let fun_locals = Register.S.of_list ((function (d, s) -> List.map allocate_variable d) f.fun_body) in
+  let decl_locals = (function (d, _) -> d) f.fun_body in
+  let fun_locals = Register.S.of_list (List.map allocate_variable decl_locals) in
+  (* remove decl_var for local variables, because they are already bound  *)
+  let pruned_body = (fun (_,s) -> ([], s)) f.fun_body in
   (* calculate graph for function body *)
-  let fun_entry = stmt (Ttree.Sblock(f.fun_body)) l r l in
+  let fun_entry = stmt (Ttree.Sblock(pruned_body)) l r l in
   {
     fun_name = f.fun_name;
     fun_result = r;
