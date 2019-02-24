@@ -17,7 +17,7 @@ let allocate_variable (decl_var:Ttree.decl_var) =
   Hashtbl.add !get_var_register name r;
   r
 
-(* function to (deterministically) an id for a field in a structure *)
+(* function to (deterministically) find an id for a field in a structure *)
 let get_field_index (stru:Ttree.structure) (field:Ttree.field) =
   let index_of e l =
     let rec index_rec i = function
@@ -26,7 +26,7 @@ let get_field_index (stru:Ttree.structure) (field:Ttree.field) =
     in
     index_rec 0 l
   in
-  let fields_list = Hashtbl.fold (fun k (v:Ttree.field) acc -> v.field_name :: acc) stru.str_fields [] in
+  let fields_list = Hashtbl.fold (fun _ (v:Ttree.field) acc -> v.field_name :: acc) stru.str_fields [] in
   index_of field.field_name fields_list
 
 let rec naive_apply_binop op (e1:Ttree.expr) (e2:Ttree.expr) destr destl =
@@ -54,18 +54,18 @@ expr (e:Ttree.expr) (destr:register) (destl:label) : label = match e.expr_node w
       | Bmul -> naive_apply_binop Mmul e1 e2 destr destl
       | Bdiv -> naive_apply_binop Mdiv e1 e2 destr destl
       | Band ->
-      (* if e1 is false, result is e1 and we proceed to destl directly;
-      otherwise result is e2, we calculate it then go to destl;
-      we use test jz because FALSE is the significative value for && *)
+      (* convert to 0 or 1 *)
       let normalize = generate(Emunop(Msetnei Int32.zero, destr, destl)) in
+      (* if e1 is false, we proceed, otherwise we calculate e2;
+      we use test jz because FALSE is the significative value for && *)
       let calculate_second = expr e1 destr normalize in
       let testl = generate (Emubranch (Mjz, destr, normalize, calculate_second)) in
       expr e2 destr testl
       | Bor ->
-      (* if e1 is true, result is e1 and we proceed to normalize directly;
-      otherwise result is e2, we calculate it then go to normalize;
-      we use test jnz because TRUE is the significative value for || *)
+      (* convert to 0 or 1 *)
       let normalize = generate(Emunop(Msetnei Int32.zero, destr, destl)) in
+      (* if e1 is true, we proceed, otherwise we calculate e2;
+      we use test jnz because TRUE is the significative value for || *)
       let calculate_second = expr e1 destr normalize in
       let testl = generate (Emubranch (Mjnz, destr, normalize, calculate_second)) in
       expr e2 destr testl
