@@ -120,14 +120,13 @@ let generate_get_arguments first_instr fun_locals =
 
 let restore_callee_saved l =
     let rec aux cnt l fresh_regs = function
-        | [] -> l, List.rev fresh_regs
+        | [] -> l, fresh_regs
         | x :: tl ->
-                let reg = List.nth Register.callee_saved cnt in
                 let fresh_reg = Register.fresh () in
                 let new_instr =
-                    Embinop (Mmov, fresh_reg, reg, l) in
+                    Embinop (Mmov, fresh_reg, x, l) in
                 aux (cnt + 1) (generate new_instr) (fresh_reg :: fresh_regs) tl
-    in aux 0 l [] Register.callee_saved
+    in aux 0 l [] (List.rev Register.callee_saved)
 
 let translate_fun (f : Rtltree.deffun) =
     let fun_name = f.fun_name in
@@ -138,8 +137,9 @@ let translate_fun (f : Rtltree.deffun) =
     let l = generate Ereturn in
     let l = generate (Edelete_frame l) in
     let (l, fresh_regs) = restore_callee_saved l in
+    let l = generate (Embinop (Mmov, f.fun_result, Register.rax, l)) in
     let () = graph := Label.M.add fun_exit
-        (Embinop (Mmov, f.fun_result, Register.rax, l)) !graph in
+        (Egoto l) !graph in
     let visit f g entry =
         let visited = Hashtbl.create 97 in
         let () = Hashtbl.add visited fun_exit () in
