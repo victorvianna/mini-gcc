@@ -52,8 +52,50 @@ let make l_info =
   Hashtbl.iter (fun _ i -> add_interference_edges i) l_info;
   !interf_graph
 
-let color g =
-  (Register.M.empty, 0)
+(* Returns a pair (todo, pcolors_map).
+
+   todo: set of pseudo-registers for which we want
+         to find a suitable actual register.
+   pcolors_map: set of possible actual registers for
+         each pseudo-register in todo.
+ *)
+let get_todo_pcolors_from_graph graph =
+  let todo = ref Register.set.empty in
+  let pcolors_map = ref Register.map.empty in
+  let add_reg_to_set reg =
+    todo := Register.set.add reg !todo in
+  let get_potential_colors interfs =
+    Register.set.difference Register.allocatable interfs in
+  let () = Register.map.iter
+            (fun reg interfs ->
+              (* we only add reg to todo if it's a pseudo-register *)
+                if Register.is_pseudo reg then
+                let () = add_reg_to_set reg in
+                let pot_colors = get_potential_colors interfs in
+                pcolors_map := Register.map.add reg pot_colors !pcolors_map)
+            graph in
+  todo, pcolors_map
+
+let color graph =
+  let color_map = ref Register.map.empty in
+  let n_regs_stack = ref 0 in
+  let todo, pcolors_map = get_todo_pcolors_from_graph graph in
+  let potential_colors_map = create_potential_colors_map todo graph in
+  let find_reg = (* tries to find a new pseudo-register to color *)
+    blablabla in
+  let spill = (* spills a new pseudo-register *)
+    blablbal in
+  let set_reg_color r c = (* sets the color of r to c *)
+    blablabla in
+  let rec iterate () =
+    let () =
+      begin
+        match find_reg with
+        | None -> spill
+        | Some r, c -> set_reg_color r c
+      end in
+    if Register.set.is_empty todo then iterate ()
+  color_map, !n_regs_stack
 
 let lookup c r =
   if Register.is_hw r then Reg r else Register.M.find r c
@@ -75,6 +117,3 @@ let translate_fun (f:Ertltree.deffun) =
 
 let program (file:Ertltree.file) =
   {funs = List.map translate_fun file.funs}
-
-
-
