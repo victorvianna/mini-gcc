@@ -191,7 +191,7 @@ let liveness (g:cfg)  =
   let all_info = (Hashtbl.create 10 : (label, live_info) Hashtbl.t) in
   let get_info l = Hashtbl.find all_info l in
   (* 1.basic filling of info table *)
-  let all_labels = List.of_seq (Seq.map (function (k, v) -> k) (Label.M.to_seq g)) in
+  let all_labels = Label.M.fold (fun key value list_vals -> key :: list_vals) g [] in
   let dfs (entry:label) : unit =
     let add_info (l:label) (i:instr) :unit =
       let (def, use) = def_use i in
