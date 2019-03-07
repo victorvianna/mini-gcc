@@ -160,12 +160,11 @@ let next_reg_color_pair todo pcolors_map grph color_map =
 
 let color_graph graph =
   let color_map = ref Register.M.empty in
-  (* add all physical registers to map *)
-  (*
-  let () = Register.S.iter
-             (fun s -> color_map := Register.M.add s (Reg s) !color_map)
-             Register.allocatable
-  in *)
+  (* color all physical register present in the graph *)
+  let () = Register.M.iter
+             (fun r r_arcs -> if Register.is_hw r then
+                                color_map := Register.M.add r (Reg r) !color_map)
+             graph in
   let n_regs_stack = ref 0 in
   let todo, pcolors_map = get_todo_pcolors_from_graph graph in
   let spill r =
@@ -175,6 +174,7 @@ let color_graph graph =
     incr n_regs_stack in
   (* remove color c from the set of possible colors of register r *)
   let remove_color_from_pcolors r c =
+    if Register.M.mem r !pcolors_map then
     let pcolors = Register.M.find r !pcolors_map in
     let pcolors = Register.S.remove c pcolors in
     pcolors_map := Register.M.add r pcolors !pcolors_map in
