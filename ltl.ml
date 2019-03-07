@@ -60,19 +60,20 @@ let make l_info =
          each pseudo-register in todo.
  *)
 let get_todo_pcolors_from_graph graph =
-  let todo = ref Register.set.empty in
-  let pcolors_map = ref Register.map.empty in
+  let todo = ref Register.S.empty in
+  let pcolors_map = ref Register.M.empty in
   let add_reg_to_set reg =
-    todo := Register.set.add reg !todo in
+    todo := Register.S.add reg !todo in
   let get_potential_colors interfs =
-    Register.set.difference Register.allocatable interfs in
-  let () = Register.map.iter
-            (fun reg interfs ->
+    Register.S.diff Register.allocatable interfs in
+  let () = Register.M.iter
+            (fun reg reg_arcs ->
               (* we only add reg to todo if it's a pseudo-register *)
+              let interfs = reg_arcs.intfs in
                 if Register.is_pseudo reg then
                 let () = add_reg_to_set reg in
                 let pot_colors = get_potential_colors interfs in
-                pcolors_map := Register.map.add reg pot_colors !pcolors_map)
+                pcolors_map := Register.M.add reg pot_colors !pcolors_map)
             graph in
   todo, pcolors_map
 
@@ -80,100 +81,101 @@ let get_todo_pcolors_from_graph graph =
 let fourth_crit todo pcolors_map graph color_map =
   (* criterium: the register has at least one possible color *)
   let satisfies_crit r = 
-    let pcolors = Register.map.find r pcolors_map in
-    not Register.set.is_empty pcolors
-  let solution = Register.set.filter satisfies_crit todo in
+    let pcolors = Register.M.find r pcolors_map in
+    not (Register.S.is_empty pcolors) in
+  let solution = Register.S.filter satisfies_crit todo in
   try
-    let r = Register.set.choose solution in
-    let pcolors = Register.map.find r pcolors_map in
-    let c = Register.set.choose pcolors in
-    (r, c)
+    let r = Register.S.choose solution in
+    let pcolors = Register.M.find r pcolors_map in
+    let c = Register.S.choose pcolors in
+    Some (r, c)
   with Not_found -> None
 
 (* criterium: the register has a preference whose color is known *)
 let third_crit todo pcolors_map graph color_map =
-  let is_colored r ->
-        Register.map.mem r color_map in
+  let is_colored r =
+        Register.M.mem r color_map in
   let satisfies_crit r = 
-    let r_arcs = Register.map.find r graph in
+    let r_arcs = Register.M.find r graph in
     let prefs = r_arcs.prefs in
-    Register.set.exists is_colored prefs in
-  let solution = Register.set.filter satisfies_crit todo in
+    Register.S.exists is_colored prefs in
+  let solution = Register.S.filter satisfies_crit todo in
   try
-    let r = Register.set.choose solution in
-    let r_arcs = Register.map.find r graph in
+    let r = Register.S.choose solution in
+    let r_arcs = Register.M.find r graph in
     let prefs = r_arcs.prefs in
-    let colored_prefs = Register.set.filter is_colored prefs in
-    let c = Register.set.choose colored_prefs in
-    (r, c)
+    let colored_prefs = Register.S.filter is_colored prefs in
+    let c = Register.S.choose colored_prefs in
+    Some (r, c)
   with Not_found -> fourth_crit todo pcolors_map graph color_map
 
 (* criterium: the register has only one possible color *)
-let second_crit todo pcolors_map graph =
+let second_crit todo pcolors_map graph color_map =
   let satisfies_crit r = 
-    let pcolors = Register.map.find r pcolors_map in
-    Register.set.cardinal pcolors = 1
-  let solution = Register.set.filter satisfies_crit todo in
+    let pcolors = Register.M.find r pcolors_map in
+    Register.S.cardinal pcolors = 1 in
+  let solution = Register.S.filter satisfies_crit todo in
   try
-    let r = Register.set.choose solution in
-    let pcolors = Register.map.find r pcolors_map in
-    let c = Register.set.choose pcolors in
-    (r, c)
+    let r = Register.S.choose solution in
+    let pcolors = Register.M.find r pcolors_map in
+    let c = Register.S.choose pcolors in
+    Some (r, c)
   with Not_found -> third_crit todo pcolors_map graph color_map
 
 (* criterium: the register has only one possible color and the
 register has a preference edge to this color *)
 let first_crit todo pcolors_map graph color_map =
   let satisfies_crit r = 
-    let pcolors = Register.map.find r pcolors_map in
-    let r_arcs = Register.map.find r graph in
-    if Register.set.cardinal pcolors = 1 then
-      let c = Register.set.choose pcolors in
-      Register.set.mem c r_arcs.prefs
+    let pcolors = Register.M.find r pcolors_map in
+    let r_arcs = Register.M.find r graph in
+    if Register.S.cardinal pcolors = 1 then
+      let c = Register.S.choose pcolors in
+      Register.S.mem c r_arcs.prefs
     else false in
-  let solution = Register.set.filter satisfies_crit todo in
+  let solution = Register.S.filter satisfies_crit todo in
   try
-    let r = Register.set.choose solution in
-    let pcolors = Register.map.find r pcolors_map in
-    let c = Register.set.choose pcolors in
-    (r, c)
+    let r = Register.S.choose solution in
+    let pcolors = Register.M.find r pcolors_map in
+    let c = Register.S.choose pcolors in
+    Some (r, c)
   with Not_found -> second_crit todo pcolors_map graph color_map
 
-let next_reg_color_pair todo pcolors_map graph color_map = (* tries to find a new pseudo-register to color *)
-  first_crit todo pcolors_map graph color_map
+(* tries to find a new pseudo-register to color *)
+let next_reg_color_pair todo pcolors_map grph color_map = 
+  first_crit todo pcolors_map grph color_map
 
-let color graph =
-  let color_map = ref Register.map.empty in
+let color_graph graph =
+  let color_map = ref Register.M.empty in
+  (* add all physical registers to map *)
+  let () = Register.S.iter
+             (fun s -> color_map := Register.M.add s (Reg s) !color_map)
+             Register.allocatable
+  in
   let n_regs_stack = ref 0 in
   let todo, pcolors_map = get_todo_pcolors_from_graph graph in
-  let potential_colors_map = create_potential_colors_map todo graph in
-  let spill () =
-    (* spills a new pseudo-register *)
-    let r = Register.set.choose !todo in
-    let () = todo := Register.set.remove r !todo in
-    let () = color_map := Register.map.add r (Spilled !n_regs_stack) color_map in
-    let () = incr n_regs_stack in
+  let spill r =
+    (* spills the pseudo-register r *)
+    let () = todo := Register.S.remove r !todo in
+    let () = color_map := Register.M.add r (Spilled !n_regs_stack) !color_map in
+    incr n_regs_stack in
+  (* remove color c from the set of possible colors of register r *)
   let remove_color_from_pcolors r c =
-    let pcolors = Register.map.find r !pcolors_map in
-    let pcolors = Register.set.remove c pcolors in
-    let () = pcolors_map := Register.map.add r pcolors !pcolors_map in
+    let pcolors = Register.M.find r !pcolors_map in
+    let pcolors = Register.S.remove c pcolors in
+    pcolors_map := Register.M.add r pcolors !pcolors_map in
+  (* sets the colors of register r to the color c and
+     removes the color c from all interferences of c *)
   let set_reg_color r c =
-    (* sets the colors of register r to the color c and
-       removes the color c from all interferences of c *)
-    let () = todo := Register.set.remove r !todo in
-    let () = color_map := Register.map.add r (Reg c) !color_map in
-    let r_arcs = Register.map.find r graph in
+    let () = todo := Register.S.remove r !todo in
+    let () = color_map := Register.M.add r (Reg c) !color_map in
+    let r_arcs = Register.M.find r graph in
     let r_intfs = r_arcs.intfs in
-    let () = Register.set.iter (fun reg -> remove_color_from_pcolors reg c) r_intfs in
-  let rec iterate () = (* we iterate until todo is empty *)
-    if not Register.set.is_empty !todo then
+    Register.S.iter (fun reg -> remove_color_from_pcolors reg c) r_intfs in
+  while not (Register.S.is_empty !todo) do
         match next_reg_color_pair !todo !pcolors_map graph !color_map with
-        | None -> let () = spill () in
-                  iterate ()
-        | Some (r, c) -> let () = set_reg_color r c in
-                  iterate () in
-  let () = iterate () in
-  !color_map, !n_regs_stack
+        | None -> let r = Register.S.choose !todo in spill r
+        | Some (r, c) -> set_reg_color r c
+  done; !color_map, !n_regs_stack
 
 let lookup c r =
   if Register.is_hw r then Reg r else Register.M.find r c
@@ -185,7 +187,7 @@ let instr c frame_size = function
 let translate_fun (f:Ertltree.deffun) =
   let l_info = Ertl.liveness !Ertl.graph in
   let interf_graph = make l_info in
-  let colors = color interf_graph in
+  let colors = color_graph interf_graph in
   (* TODO: translate ertl instructions *)
   {
     fun_name = f.fun_name;
