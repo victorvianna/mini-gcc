@@ -196,8 +196,11 @@ let lookup c r =
   if Register.is_hw r then Reg r else Register.M.find r c
 
 let instr c frame_size = function
-  | Ertltree.Econst (n, r, l) ->
-      Econst (n, lookup c r, l)
+  | Ertltree.Econst (n, r, l) -> Econst (n, lookup c r, l)
+  | Ertltree.Ereturn -> Ereturn
+  | Ertltree.Ecall (id, i, l) -> Ecall (id, l)
+  | Ertltree.Egoto l -> Egoto l
+      
 
 let translate_fun (f:Ertltree.deffun) =
   let l_info = Ertl.liveness !Ertl.graph in
