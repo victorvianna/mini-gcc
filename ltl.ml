@@ -1,4 +1,15 @@
 open Ltltree
+open Format
+
+exception Error of string
+
+(* Functions to print the coloring *)
+let print_color fmt = function
+  | Reg hr    -> fprintf fmt "%a" Register.print hr
+  | Spilled n -> fprintf fmt "stack %d" n
+let print cm =
+  Register.M.iter
+    (fun r cr -> printf "%a -> %a@\n" Register.print r print_color cr) cm
 
 type arcs = { prefs: Register.set; intfs: Register.set }
 type igraph = arcs Register.map
@@ -105,8 +116,11 @@ let third_crit todo pcolors_map graph color_map =
     let r_arcs = Register.M.find r graph in
     let prefs = r_arcs.prefs in
     let colored_prefs = Register.S.filter is_colored prefs in
-    let c = Register.S.choose colored_prefs in
-    Some (r, c)
+    let colored_pref = Register.S.choose colored_prefs in
+    let c = match Register.M.find colored_pref color_map with
+      | Reg col -> col
+      | _ -> raise (Error "It should had a physical register associated")
+    in Some (r, c)
   with Not_found -> fourth_crit todo pcolors_map graph color_map
 
 (* criterium: the register has only one possible color *)
@@ -147,10 +161,11 @@ let next_reg_color_pair todo pcolors_map grph color_map =
 let color_graph graph =
   let color_map = ref Register.M.empty in
   (* add all physical registers to map *)
+  (*
   let () = Register.S.iter
              (fun s -> color_map := Register.M.add s (Reg s) !color_map)
              Register.allocatable
-  in
+  in *)
   let n_regs_stack = ref 0 in
   let todo, pcolors_map = get_todo_pcolors_from_graph graph in
   let spill r =
