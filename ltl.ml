@@ -249,10 +249,16 @@ let translate_Estore r1 r2 i l c =
           Embinop (Mmov, op1, Reg Register.tmp1, l)
      end
 
+let compare_operands op1 op2 =
+        match op1, op2 with
+        | Reg r1, Reg r2 -> r1 = r2
+        | Spilled i1, Spilled i2 -> i1 = i2
+        | _ -> false
+
 let translate_Embinop op r1 r2 l c =
   let op1 = lookup c r1 in
   let op2 = lookup c r2 in
-  if op = Ops.Mmov && op1 = op2 then Egoto l else
+  if op = Ops.Mmov && compare_operands op1 op2 then Egoto l else
     match op2 with
     | Reg _ ->
        Embinop (op, op1, op2, l)
