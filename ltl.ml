@@ -276,8 +276,11 @@ let instr c frame_size = function
   | Ertltree.Ecall (id, i, l) -> Ecall (id, l)
   | Ertltree.Egoto l -> Egoto l
   | Ertltree.Ealloc_frame l ->
-     let word_size = 8 in
-     let l = generate (Econst (Int32.of_int (-word_size * frame_size), Reg Register.rsp, l)) in
+     let l = if frame_size > 0 then
+               let word_size = 8 in
+               generate (Econst (Int32.of_int (-word_size * frame_size), Reg Register.rsp, l))
+             else l
+     in
      let l = generate (Embinop (Mmov, Reg Register.rsp, Reg Register.rbp, l)) in
      Epush (Reg Register.rbp, l)
   | Ertltree.Edelete_frame l ->
