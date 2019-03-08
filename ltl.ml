@@ -301,13 +301,20 @@ let translate_Eget_param idx dst_reg dst_label color_map n_pars =
        
        
 let translate_Ealloc_frame frame_size l =
-  let l = if frame_size > 0 then
+  if frame_size > 0 then
             let word_size = 8 in
-            generate (Econst (Int32.of_int (-word_size * frame_size), Reg Register.rsp, l))
-          else l
-  in
-  let l = generate (Embinop (Mmov, Reg Register.rsp, Reg Register.rbp, l)) in
-  Epush (Reg Register.rbp, l)
+            let l = generate (Econst (Int32.of_int (-word_size * frame_size), Reg Register.rsp, l)) in
+            let l = generate (Embinop (Mmov, Reg Register.rsp, Reg Register.rbp, l)) in
+            Epush (Reg Register.rbp, l)
+  else
+    Egoto l
+
+let translate_Edelete_frame frame_size l =
+  if frame_size > 0 then
+     let l = generate (Epop (Register.rbp, l)) in
+     Embinop (Mmov, Reg Register.rbp, Reg Register.rsp, l)
+  else
+    Egoto l
 
 let instr c frame_size n_pars = function
   | Ertltree.Econst (n, r, l) -> Econst (n, lookup c r, l)
@@ -317,8 +324,7 @@ let instr c frame_size n_pars = function
   | Ertltree.Ealloc_frame l ->
      translate_Ealloc_frame frame_size l
   | Ertltree.Edelete_frame l ->
-     let l = generate (Epop (Register.rbp, l)) in
-     Embinop (Mmov, Reg Register.rbp, Reg Register.rsp, l)
+     translate_Edelete_frame frame_size l
   | Ertltree.Eload (r1, i, r2, l) ->
      translate_Eload r1 i r2 l c
   | Ertltree.Estore (r1, r2, i, l) ->
