@@ -201,6 +201,30 @@ let color_graph graph =
 let lookup c r =
   if Register.is_hw r then Reg r else Register.M.find r c
 
+let translate_Eload r1 i r2 l c =
+    let op1 = lookup c r1 in
+    let op2 = lookup c r2 in
+    match op1 with
+    | Reg pr1 -> (* register r1 is physical *)
+       begin
+         match op2 with
+         | Reg pr2 -> Eload (pr1, i, pr2, l)
+         | Spilled pos -> 
+            let l = generate (Embinop (Mmov, Reg Register.tmp1, op2, l)) in
+            Eload (pr1, i, Register.tmp1, l)
+       end
+    | Spilled pos1 -> (* register r1 is on the stack *)
+       begin
+         match op2 with
+         | Reg pr2 -> 
+            let l = generate (Eload (Register.tmp1, i, pr2, l)) in
+            Embinop (Mmov, op1, Reg Register.tmp1, l)
+         | Spilled pos2 ->
+            let l = generate (Embinop (Mmov, Reg Register.tmp2, op2, l)) in
+            let l = generate (Eload (Register.tmp1, i, Register.tmp2, l)) in
+            Embinop (Mmov, op1, Reg Register.tmp1, l)
+       end
+
 let instr c frame_size = function
   | Ertltree.Econst (n, r, l) -> Econst (n, lookup c r, l)
   | Ertltree.Ereturn -> Ereturn
@@ -215,9 +239,8 @@ let instr c frame_size = function
      let l = generate (Epop (Register.rbp, l)) in
      Embinop (Mmov, Reg Register.rbp, Reg Register.rsp, l)
   | Ertltree.Eload (r1, i, r2, l) ->
-     
-      
-
+     translate_Eload r1 i r2 l c
+    
 let translate_fun (f:Ertltree.deffun) =
   let l_info = Ertl.liveness !Ertl.graph in
   let interf_graph = make l_info in
