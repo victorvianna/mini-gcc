@@ -338,7 +338,19 @@ let translate_fun (f:Ertltree.deffun) =
   let l_info = Ertl.liveness !Ertl.graph in
   let interf_graph = make l_info in
   let colors = color_graph interf_graph in
+  let color_map = fst colors in
+  let frame_size = snd colors in
   (* TODO: translate ertl instructions *)
+  (* we have to clear the graph because otherwise we might have
+     conflict if two different functions have the same label *)
+  let () = graph := Label.M.empty in
+  let rec dfs (label : label) = 
+    let ertl_inst = Label.M.find label f.fun_body in
+    let succs = Ertltree.succ ertl_inst in
+    let ltl_inst = instr color_map frame_size f.fun_formals ertl_inst in
+    let () = graph := Label.M.add label ltl_inst !graph in
+    List.iter dfs succs in
+  let () = dfs f.fun_entry in
   {
     fun_name = f.fun_name;
     fun_entry = f.fun_entry;
