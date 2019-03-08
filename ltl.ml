@@ -270,6 +270,19 @@ let translate_Embinop op r1 r2 l c =
           Embinop (Mmov, op1, Reg Register.tmp1, l)
      end
 
+let translate_Emubranch branch r l1 l2 c =
+  let op = lookup c r in
+  Emubranch (branch, op, l1, l2)
+
+let translate_Embbranch branch r1 r2 l1 l2 c =
+  let op1 = lookup c r1 in
+  let op2 = lookup c r2 in
+  match op1, op2 with
+  | Reg _, _ | _ , Reg _ -> Embbranch (branch, op1, op2, l1, l2)
+  | _, _ ->
+     let l = generate (Embbranch (branch, Reg Register.tmp1, op2, l1, l2)) in
+     Embinop (Mmov, op1, Reg Register.tmp1, l)
+  
 let instr c frame_size = function
   | Ertltree.Econst (n, r, l) -> Econst (n, lookup c r, l)
   | Ertltree.Ereturn -> Ereturn
@@ -294,6 +307,10 @@ let instr c frame_size = function
      Emunop (op, lookup c r, l)
   | Ertltree.Embinop (op, r1, r2, l) ->
      translate_Embinop op r1 r2 l c
+  | Ertltree.Emubranch (branch, r, l1, l2) ->
+     translate_Emubranch branch r l1 l2 c
+  | Ertltree.Embbranch (branch, r1, r2, l1, l2) ->
+     translate_Embbranch branch r1 r2 l1 l2 c
      
     
 let translate_fun (f:Ertltree.deffun) =
