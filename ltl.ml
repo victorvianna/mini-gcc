@@ -176,8 +176,8 @@ let color_graph graph =
   let spill r =
     (* spills the pseudo-register r *)
     let () = todo := Register.S.remove r !todo in
-    let () = color_map := Register.M.add r (Spilled !n_regs_stack) !color_map in
-    incr n_regs_stack in
+    let () = incr n_regs_stack in
+    color_map := Register.M.add r (Spilled (!n_regs_stack * -8)) !color_map in
   (* remove color c from the set of possible colors of register r *)
   let remove_color_from_pcolors r c =
     if Register.M.mem r !pcolors_map then
@@ -214,6 +214,8 @@ let instr c frame_size = function
   | Ertltree.Edelete_frame l ->
      let l = generate (Epop (Register.rbp, l)) in
      Embinop (Mmov, Reg Register.rbp, Reg Register.rsp, l)
+  | Ertltree.Eload (r1, i, r2, l) ->
+     
       
 
 let translate_fun (f:Ertltree.deffun) =
