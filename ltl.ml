@@ -283,7 +283,24 @@ let translate_Embbranch branch r1 r2 l1 l2 c =
      let l = generate (Embbranch (branch, Reg Register.tmp1, op2, l1, l2)) in
      Embinop (Mmov, op1, Reg Register.tmp1, l)
   
-let instr c frame_size = function
+let translate_Eget_param idx dst_reg dst_label color_map n_pars =
+     let dst_op = lookup color_map dst_reg in
+     let n_pars_hw_regs = List.length Register.parameters in
+     if idx < n_pars_hw_regs then
+       let src_op = lookup color_map (List.nth Register.parameters idx) in
+       Embinop (Mmov, src_op, dst_op, dst_label) 
+     else
+       let word_size = 8 in
+       let offset_idx = n_pars - idx + 1 in
+       let offset = offset_idx * word_size in
+       match dst_op with
+       | Reg r_color -> Eload (Register.rbp, offset, r_color, dst_label)
+       | _ ->
+          let l = generate (Embinop (Mmov, Reg Register.tmp1, dst_op, dst_label)) in
+          Eload (Register.rbp, offset, Register.tmp1, l)
+          
+  
+let instr c frame_size n_pars = function
   | Ertltree.Econst (n, r, l) -> Econst (n, lookup c r, l)
   | Ertltree.Ereturn -> Ereturn
   | Ertltree.Ecall (id, i, l) -> Ecall (id, l)
@@ -311,8 +328,9 @@ let instr c frame_size = function
      translate_Emubranch branch r l1 l2 c
   | Ertltree.Embbranch (branch, r1, r2, l1, l2) ->
      translate_Embbranch branch r1 r2 l1 l2 c
+  | Ertltree.Eget_param (i, r, l) ->
+     translate_Eget_param i r l c n_pars
      
-    
 let translate_fun (f:Ertltree.deffun) =
   let l_info = Ertl.liveness !Ertl.graph in
   let interf_graph = make l_info in
