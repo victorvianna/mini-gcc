@@ -225,6 +225,30 @@ let translate_Eload r1 i r2 l c =
             Embinop (Mmov, op1, Reg Register.tmp1, l)
        end
 
+let translate_Estore r1 r2 i l c =
+    let op1 = lookup c r1 in
+    let op2 = lookup c r2 in
+    match op1 with
+    | Reg pr1 -> (* register r1 is physical *)
+       begin
+         match op2 with
+         | Reg pr2 -> Estore (pr1, pr2, i, l)
+         | Spilled _ -> 
+            let l = generate (Estore (pr1, Register.tmp1, i, l)) in
+            Embinop (Mmov, op2, Reg Register.tmp1, l)
+       end
+    | Spilled _ -> (* register r1 is on the stack *)
+       begin
+         match op2 with
+         | Reg pr2 -> 
+            let l = generate (Estore (Register.tmp1, pr2, i, l)) in
+            Embinop (Mmov, op1, Reg Register.tmp1, l)
+         | Spilled pos2 ->
+            let l = generate (Estore (Register.tmp1, Register.tmp2, i, l)) in
+            let l = generate (Embinop (Mmov, op2, Reg Register.tmp2, l)) in
+            Embinop (Mmov, op1, Reg Register.tmp1, l)
+       end
+
 let instr c frame_size = function
   | Ertltree.Econst (n, r, l) -> Econst (n, lookup c r, l)
   | Ertltree.Ereturn -> Ereturn
@@ -240,6 +264,8 @@ let instr c frame_size = function
      Embinop (Mmov, Reg Register.rbp, Reg Register.rsp, l)
   | Ertltree.Eload (r1, i, r2, l) ->
      translate_Eload r1 i r2 l c
+  | Ertltree.Estore (r1, r2, i, l) ->
+     translate_Estore r1 r2 i l c
     
 let translate_fun (f:Ertltree.deffun) =
   let l_info = Ertl.liveness !Ertl.graph in
