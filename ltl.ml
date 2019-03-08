@@ -309,7 +309,8 @@ let translate_Eget_param idx dst_reg dst_label color_map n_pars =
 let translate_Ealloc_frame frame_size l =
   if frame_size > 0 then
             let word_size = 8 in
-            let l = generate (Econst (Int32.of_int (-word_size * frame_size), Reg Register.rsp, l)) in
+            let i32_shift = Int32.of_int (-word_size * frame_size) in
+            let l = generate (Emunop (Maddi i32_shift, Reg Register.rsp, l)) in
             let l = generate (Embinop (Mmov, Reg Register.rsp, Reg Register.rbp, l)) in
             Epush (Reg Register.rbp, l)
   else
