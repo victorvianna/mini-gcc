@@ -308,20 +308,25 @@ let translate_Eget_param idx dst_reg dst_label color_map n_pars =
        
 let translate_Ealloc_frame frame_size l =
   if frame_size > 0 then
-            let word_size = 8 in
-            let i32_shift = Int32.of_int (-word_size * frame_size) in
-            let l = generate (Emunop (Maddi i32_shift, Reg Register.rsp, l)) in
-            let l = generate (Embinop (Mmov, Reg Register.rsp, Reg Register.rbp, l)) in
-            Epush (Reg Register.rbp, l)
   else
     Egoto l
 
 let translate_Edelete_frame frame_size l =
   if frame_size > 0 then
-     let l = generate (Epop (Register.rbp, l)) in
-     Embinop (Mmov, Reg Register.rbp, Reg Register.rsp, l)
   else
     Egoto l
+
+let translate_Epush_param r l color_map =
+  let word_size = 8 in
+  let i32_shift = Int32.of_int (-word_size) in
+  match lookup color_map r with
+  | Reg c ->
+    let l = generate (Estore (c, Register.rsp, 0, l)) in
+    Emunop (Maddi i32_shift, Reg Register.rsp, l)
+  | Spilled off as op ->
+     let l = generate (Estore (Register.tmp1, Register.rsp, 0, l)) in
+     let l = generate (Emunop (Maddi i32_shift, Reg Register.rsp, l)) in
+     Embinop (Mmov, op, Reg Register.tmp1, l)
 
 let instr c frame_size n_pars = function
   | Ertltree.Econst (n, r, l) -> Econst (n, lookup c r, l)
@@ -346,6 +351,8 @@ let instr c frame_size n_pars = function
      translate_Embbranch branch r1 r2 l1 l2 c
   | Ertltree.Eget_param (i, r, l) ->
      translate_Eget_param i r l c n_pars
+  | Ertltree.Epush_param (r, l) ->
+     translate_Epush_param r l c
     
 let translate_fun (f:Ertltree.deffun) =
   let l_info = Ertl.liveness !Ertl.graph in
