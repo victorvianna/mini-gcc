@@ -5,34 +5,35 @@ exception Error of string
 let visited_labels = Hashtbl.create 17
 type instr = Code of X86_64.text | Label of Label.t
 let code = ref []
-let emit label instr = code := Code instr :: Label label :: !code
+let emit l instr = code := Code instr :: Label l :: !code
 let emit_wl instr = code := Code instr :: !code
+let emit_label l = code := Label l :: !code
 let labels = Hashtbl.create 17
-let need_label label = Hashtbl.add labels label ()
+let need_label l = Hashtbl.add labels l ()
 
 let operand ltl_operand =
   match ltl_operand with
   | Ltltree.Reg r -> reg (register64 r)
   | Ltltree.Spilled offset -> ind ~ofs:(offset) rbp 
   
-let rec lin ltl_map label =
-  if not (Hashtbl.mem visited_labels label) then begin
-    Hashtbl.add visited_labels label ();
-    instr ltl_map label (Label.M.find label ltl_map)
+let rec lin ltl_map l =
+  if not (Hashtbl.mem visited_labels l) then begin
+    Hashtbl.add visited_labels l ();
+    instr ltl_map l (Label.M.find l ltl_map)
   end else begin
-    need_label label;
-    emit_wl (jmp (label :> string))
+    need_label l;
+    emit_wl (jmp (l :> string))
   end
 
-and instr ltl_map label = function
-  | Ltltree.Econst (n, r, l) ->
-      emit label (movq (imm32 n) (operand r)); lin ltl_map l
-  | Ltltree.Eload (r1, i, r2, l) ->
+and instr ltl_map l = function
+  | Ltltree.Econst (n, r, l1) ->
+      emit l (movq (imm32 n) (operand r)); lin ltl_map l1
+  | Ltltree.Eload (r1, i, r2, l1) ->
      let op1 = ind ~ofs:i (register64 r1) in
      let op2 = reg (register64 r2) in
-     emit label (movq op1 op2); lin ltl_map l
-  | Ltltree.Estore (r1, r2, i, l) ->
+     emit l (movq op1 op2); lin ltl_map l1
+  | Ltltree.Estore (r1, r2, i, l1) ->
      let op1 = reg (register64 r1) in
      let op2 = ind ~ofs:i (register64 r2) in
-     emit label (movq op1 op2); lin ltl_map l
+     emit l (movq op1 op2); lin ltl_map l1
   | _ -> raise (Error "undefined")
