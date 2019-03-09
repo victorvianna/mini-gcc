@@ -36,4 +36,13 @@ and instr ltl_map l = function
      let op1 = reg (register64 r1) in
      let op2 = ind ~ofs:i (register64 r2) in
      emit l (movq op1 op2); lin ltl_map l1
+  | Ltltree.Egoto l1 ->
+     if Hashtbl.mem visited_labels l1 then
+       emit_wl (jmp (l1 :> string))
+     else
+       begin
+         emit_label l; lin ltl_map l1
+       end
+    
+       
   | _ -> raise (Error "undefined")
