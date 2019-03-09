@@ -110,18 +110,23 @@ let fourth_crit todo pcolors_map graph color_map =
 
 (* criterium: the register has a preference whose color is known *)
 let third_crit todo pcolors_map graph color_map =
-  let is_colored r =
-    Register.M.mem r color_map in
+  let is_colored_and_possible pcolors r =
+    if not (Register.M.mem r color_map) then false
+    else match Register.M.find r color_map with
+         | Reg hw_reg -> Register.S.mem hw_reg pcolors
+         | _ -> false in
   let satisfies_crit r = 
     let r_arcs = Register.M.find r graph in
     let prefs = r_arcs.prefs in
-    Register.S.exists is_colored prefs in
+    let pcolors = Register.M.find r pcolors_map in
+    Register.S.exists (is_colored_and_possible pcolors) prefs in
   let solution = Register.S.filter satisfies_crit todo in
   try
     let r = Register.S.choose solution in
     let r_arcs = Register.M.find r graph in
     let prefs = r_arcs.prefs in
-    let colored_prefs = Register.S.filter is_colored prefs in
+    let pcolors = Register.M.find r pcolors_map in
+    let colored_prefs = Register.S.filter (is_colored_and_possible pcolors) prefs in
     let colored_pref = Register.S.choose colored_prefs in
     let c = match Register.M.find colored_pref color_map with
       | Reg col -> col
@@ -250,10 +255,10 @@ let translate_Estore r1 r2 i l c =
      end
 
 let compare_operands op1 op2 =
-        match op1, op2 with
-        | Reg r1, Reg r2 -> r1 = r2
-        | Spilled i1, Spilled i2 -> i1 = i2
-        | _ -> false
+  match op1, op2 with
+  | Reg r1, Reg r2 -> r1 = r2
+  | Spilled i1, Spilled i2 -> i1 = i2
+  | _ -> false
 
 let translate_Embinop op r1 r2 l c =
   let op1 = lookup c r1 in
@@ -308,11 +313,18 @@ let translate_Eget_param idx dst_reg dst_label color_map n_pars =
        
 let translate_Ealloc_frame frame_size l =
   if frame_size > 0 then
+    let word_size = 8 in
+    let i32_shift = Int32.of_int (-word_size * frame_size) in
+    let l = generate (Emunop (Maddi i32_shift, Reg Register.rsp, l)) in
+    let l = generate (Embinop (Mmov, Reg Register.rsp, Reg Register.rbp, l)) in
+    Epush (Reg Register.rbp, l)
   else
     Egoto l
 
 let translate_Edelete_frame frame_size l =
   if frame_size > 0 then
+    let l = generate (Epop (Register.rbp, l)) in
+    Embinop (Mmov, Reg Register.rbp, Reg Register.rsp, l)
   else
     Egoto l
 
@@ -360,16 +372,18 @@ let translate_fun (f:Ertltree.deffun) =
   let colors = color_graph interf_graph in
   let color_map = fst colors in
   let frame_size = snd colors in
-  (* TODO: translate ertl instructions *)
   (* we have to clear the graph because otherwise we might have
      conflict if two different functions have the same label *)
   let () = graph := Label.M.empty in
+  let visited_labels = ref Label.S.empty in
   let rec dfs (label : label) = 
-    let ertl_inst = Label.M.find label f.fun_body in
-    let succs = Ertltree.succ ertl_inst in
-    let ltl_inst = instr color_map frame_size f.fun_formals ertl_inst in
-    let () = graph := Label.M.add label ltl_inst !graph in
-    List.iter dfs succs in
+    if not (Label.S.mem label !visited_labels) then
+      let () = visited_labels := Label.S.add label !visited_labels in
+      let ertl_inst = Label.M.find label f.fun_body in
+      let succs = Ertltree.succ ertl_inst in
+      let ltl_inst = instr color_map frame_size f.fun_formals ertl_inst in
+      let () = graph := Label.M.add label ltl_inst !graph in
+      List.iter dfs succs in
   let () = dfs f.fun_entry in
   {
     fun_name = f.fun_name;
