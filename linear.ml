@@ -25,6 +25,10 @@ let rec lin ltl_map label =
   end
 
 and instr ltl_map label = function
-  | Ltltree.Econst (n, r, l1) ->
-      emit label (movq (imm32 n) (operand r)); lin ltl_map l1
+  | Ltltree.Econst (n, r, l) ->
+      emit label (movq (imm32 n) (operand r)); lin ltl_map l
+  | Ltltree.Eload (r1, i, r2, l) ->
+     let op1 = ind ~ofs:i (register64 r1) in
+     let op2 = reg (register64 r2) in
+     emit label (movq op1 op2); lin ltl_map l
   | _ -> raise (Error "undefined")
