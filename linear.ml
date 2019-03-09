@@ -43,6 +43,8 @@ and instr ltl_map l = function
        begin
          emit_label l; lin ltl_map l1
        end
+  | Ltltree.Ereturn ->
+     emit l ret
     
        
   | _ -> raise (Error "undefined")
