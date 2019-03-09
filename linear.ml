@@ -31,4 +31,8 @@ and instr ltl_map label = function
      let op1 = ind ~ofs:i (register64 r1) in
      let op2 = reg (register64 r2) in
      emit label (movq op1 op2); lin ltl_map l
+  | Ltltree.Estore (r1, r2, i, l) ->
+     let op1 = reg (register64 r1) in
+     let op2 = ind ~ofs:i (register64 r2) in
+     emit label (movq op1 op2); lin ltl_map l
   | _ -> raise (Error "undefined")
