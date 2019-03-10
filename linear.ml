@@ -210,8 +210,15 @@ and instr ltl_map l = function
      let op = operand op in
      emit l (pushq op); lin ltl_map l1
   | Ecall (id, l1) ->
-     let fun_def = get_fun_entry id in
-     emit l (call fun_def.fun_name); lin ltl_map l1
+     let fun_name =
+       try
+         let fun_def = get_fun_entry id in
+         fun_def.fun_name
+       with
+         Error _ -> 
+          if id = "sbrk" || id = "putchar" then id
+          else raise (Error "Call to undefined function") in
+     emit l (call fun_name); lin ltl_map l1
   | Epop (r, l1) ->
      emit l (popq (register64 r)); lin ltl_map l1
 
