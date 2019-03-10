@@ -99,4 +99,67 @@ and instr ltl_map l = function
        | Msetge ->
           emit l (cmpq op1 op2); emit_wl (setge op2_8bits); lin ltl_map l1
      end
+  | Emubranch (branch, op, l1, l2) ->
+     let op1 = operand op in
+     begin
+       match branch with
+       | Mjz ->
+          emit l (testq op1 op1);
+          if not (Hashtbl.mem visited_labels l2) then
+            begin
+              emit_wl (jz (l1 :> string)); lin ltl_map l2; lin ltl_map l1
+            end
+          else if not (Hashtbl.mem visited_labels l1) then
+            begin
+              emit_wl (jnz (l2 :> string)); lin ltl_map l1; lin ltl_map l2
+            end
+          else
+            begin
+              emit_wl (jz (l1 :> string)); emit_wl (jmp (l2 :> string))
+            end
+       | Mjnz ->
+          emit l (testq op1 op1);
+          if not (Hashtbl.mem visited_labels l2) then
+            begin
+              emit_wl (jnz (l1 :> string)); lin ltl_map l2; lin ltl_map l1
+            end
+          else if not (Hashtbl.mem visited_labels l1) then
+            begin
+              emit_wl (jz (l2 :> string)); lin ltl_map l1; lin ltl_map l2
+            end
+          else
+            begin
+              emit_wl (jnz (l1 :> string)); emit_wl (jmp (l2 :> string))
+            end
+       | Mjlei i32 ->
+          emit l (cmpq (imm32 i32) op1);
+          if not (Hashtbl.mem visited_labels l2) then
+            begin
+              emit_wl (jle (l1 :> string)); lin ltl_map l2; lin ltl_map l1
+            end
+          else if not (Hashtbl.mem visited_labels l1) then
+            begin
+              emit_wl (jg (l2 :> string)); lin ltl_map l1; lin ltl_map l2
+            end
+          else
+            begin
+              emit_wl (jle (l1 :> string)); emit_wl (jmp (l2 :> string))
+            end
+       | Mjgi i32 ->
+          emit l (cmpq (imm32 i32) op1);
+          if not (Hashtbl.mem visited_labels l2) then
+            begin
+              emit_wl (jg (l1 :> string)); lin ltl_map l2; lin ltl_map l1
+            end
+          else if not (Hashtbl.mem visited_labels l1) then
+            begin
+              emit_wl (jle (l2 :> string)); lin ltl_map l1; lin ltl_map l2
+            end
+          else
+            begin
+              emit_wl (jg (l1 :> string)); emit_wl (jmp (l2 :> string))
+            end
+     end
+     
+     
   | _ -> raise (Error "undefined")
