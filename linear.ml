@@ -11,6 +11,8 @@ let emit_label l = code := Label l :: !code
 let labels = Hashtbl.create 17
 let need_label l = Hashtbl.add labels l ()
 
+let funs = ref []
+
 (* produces an 64-bit operand if possible *)
 let operand ltl_operand =
   match ltl_operand with
@@ -23,6 +25,16 @@ let operand8 ltl_operand =
   | Ltltree.Reg r -> reg (register8 (register64 r))
   | Ltltree.Spilled offset -> ind ~ofs:(offset) rbp 
 
+let get_fun_entry fun_name =
+  let rec aux = function
+    | [] -> raise (Error "function not found")
+    | (fun_def : Ltltree.deffun) :: fun_def_list ->
+       if fun_def.fun_name = fun_name then
+         fun_def
+       else
+         aux fun_def_list
+      in aux !funs
+                                   
 let rec lin ltl_map l =
   if not (Hashtbl.mem visited_labels l) then begin
       Hashtbl.add visited_labels l ();
@@ -196,4 +208,11 @@ and instr ltl_map l = function
   | Epush (op, l1) ->
      let op = operand op in
      emit l (pushq op); lin ltl_map l1
+  | Ecall (id, l1) ->
+     let fun_def = get_fun_entry id in
+     let fun_entry = fun_def.fun_entry in
+     emit l (call (fun_entry :> string)); lin ltl_map l1
   | _ -> raise (Error "undefined")
+
+let program (file : Ltltree.file) =
+  funs := file.funs
