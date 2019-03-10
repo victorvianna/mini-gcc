@@ -1,4 +1,5 @@
 open X86_64
+open Format
 
 exception Error of string
                  
@@ -211,9 +212,30 @@ and instr ltl_map l = function
   | Ecall (id, l1) ->
      let fun_def = get_fun_entry id in
      let fun_entry = fun_def.fun_entry in
-     emit l (call (fun_entry :> string)); lin ltl_map l1
+     need_label fun_entry; emit l (call (fun_entry :> string)); lin ltl_map l1
   | Epop (r, l1) ->
      emit l (popq (register64 r)); lin ltl_map l1
 
+let necessary_label = function
+  | Code _ -> true
+  | Label l -> Hashtbl.mem labels l
+  
+let translate_function (fun_def : Ltltree.deffun) =
+  code := [];
+  lin fun_def.fun_body fun_def.fun_entry;
+  code := List.rev !code;
+  code := List.filter necessary_label !code;
+  !code
+
+let concatenate_asm_text asm_text = function
+    | Code c -> asm_text ++ c
+    | Label l -> asm_text ++ (label (l :> string))
+
 let program (file : Ltltree.file) =
-  funs := file.funs
+  funs := file.funs;
+  let code_text = ref nop in
+  let add_function_code (fun_def : Ltltree.deffun) =
+    let new_code_text_fragment = translate_function fun_def in
+    code_text := List.fold_left concatenate_asm_text !code_text new_code_text_fragment in
+  List.iter add_function_code !funs;
+  {text = !code_text; data = nop}
