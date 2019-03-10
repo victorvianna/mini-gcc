@@ -193,4 +193,7 @@ and instr ltl_map l = function
               emit_wl (jle (l1 :> string)); emit_wl (jmp (l2 :> string))
             end
      end
+  | Epush (op, l1) ->
+     let op = operand op in
+     emit l (pushq op); lin ltl_map l1
   | _ -> raise (Error "undefined")
