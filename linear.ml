@@ -212,7 +212,8 @@ and instr ltl_map l = function
      let fun_def = get_fun_entry id in
      let fun_entry = fun_def.fun_entry in
      emit l (call (fun_entry :> string)); lin ltl_map l1
-  | _ -> raise (Error "undefined")
+  | Epop (r, l1) ->
+     emit l (popq (register64 r)); lin ltl_map l1
 
 let program (file : Ltltree.file) =
   funs := file.funs
