@@ -11,6 +11,7 @@ let type_only = ref false
 let interp_rtl = ref false
 let interp_ertl = ref false
 let interp_ltl = ref false
+let save_asm = ref false
 let debug = ref false
 
 let ifile = ref ""
@@ -28,6 +29,8 @@ let options =
      "  interprets ERTL (and does not compile)";
    "--interp-ltl", Arg.Set interp_ltl,
      "  interprets LTL (and does not compile)";
+   "--save-asm", Arg.Set save_asm,
+     "  prints asm (and does not compile)";
    "--debug", Arg.Set debug,
      "  debug mode";
    ]
@@ -65,6 +68,10 @@ let () =
     let p = Ltl.program p in
     if debug then Ltltree.print_file std_formatter p;
     if !interp_ltl then begin ignore (Ltlinterp.program p); exit 0 end;
+    let p = Linear.program p in
+    if debug then X86_64.print_program std_formatter p;
+    let asm_filename = (Filename.remove_extension !ifile ^ ".s") in
+    X86_64.print_in_file ~file:asm_filename p
     (* ... *)
   with
     | Lexer.Lexical_error c ->
