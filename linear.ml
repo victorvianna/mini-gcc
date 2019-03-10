@@ -160,6 +160,37 @@ and instr ltl_map l = function
               emit_wl (jg (l1 :> string)); emit_wl (jmp (l2 :> string))
             end
      end
-     
-     
+  | Embbranch (branch, op1, op2, l1, l2) ->
+     let op1 = operand op1 in
+     let op2 = operand op2 in
+     emit l (cmpq op1 op2);
+     begin
+       match branch with
+       | Mjl ->
+          if not (Hashtbl.mem visited_labels l2) then
+            begin
+              emit_wl (jl (l1 :> string)); lin ltl_map l2; lin ltl_map l1
+            end
+          else if not (Hashtbl.mem visited_labels l1) then
+            begin
+              emit_wl (jge (l2 :> string)); lin ltl_map l1; lin ltl_map l2
+            end
+          else
+            begin
+              emit_wl (jl (l1 :> string)); emit_wl (jmp (l2 :> string))
+            end
+       | Mjle ->
+          if not (Hashtbl.mem visited_labels l2) then
+            begin
+              emit_wl (jle (l1 :> string)); lin ltl_map l2; lin ltl_map l1
+            end
+          else if not (Hashtbl.mem visited_labels l1) then
+            begin
+              emit_wl (jg (l2 :> string)); lin ltl_map l1; lin ltl_map l2
+            end
+          else
+            begin
+              emit_wl (jle (l1 :> string)); emit_wl (jmp (l2 :> string))
+            end
+     end
   | _ -> raise (Error "undefined")
