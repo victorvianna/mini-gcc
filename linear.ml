@@ -58,7 +58,9 @@ and instr ltl_map l = function
      emit l (movq op1 op2); lin ltl_map l1
   | Ltltree.Egoto l1 ->
      if Hashtbl.mem visited_labels l1 then
-       emit_wl (jmp (l1 :> string))
+       begin
+         need_label l1; emit l (jmp (l1 :> string))
+       end
      else
        begin
          emit_label l; lin ltl_map l1
@@ -98,7 +100,8 @@ and instr ltl_map l = function
        | Mmul ->
           emit l (imulq op1 op2); lin ltl_map l1
        | Mdiv ->
-          emit l (idivq op1); lin ltl_map l1
+          emit l cqto; 
+          emit_wl (idivq op1); lin ltl_map l1
        | Msete ->
           emit l (cmpq op1 op2); emit_wl (sete op2_8bits); lin ltl_map l1
        | Msetne ->
@@ -113,11 +116,13 @@ and instr ltl_map l = function
           emit l (cmpq op1 op2); emit_wl (setge op2_8bits); lin ltl_map l1
      end
   | Emubranch (branch, op, l1, l2) ->
-     let op1 = operand op in
      begin
        match branch with
        | Mjz ->
-          emit l (testq op1 op1);
+          let op1 = operand8 op in
+          let tmp_op = reg (register8 (register64 Register.tmp1)) in
+          emit l (movb op1 tmp_op);
+          emit_wl (testb tmp_op tmp_op);
           if not (Hashtbl.mem visited_labels l2) then
             begin
               need_label l1; emit_wl (jz (l1 :> string)); lin ltl_map l2; lin ltl_map l1
@@ -131,7 +136,10 @@ and instr ltl_map l = function
               need_label l1; need_label l2; emit_wl (jz (l1 :> string)); emit_wl (jmp (l2 :> string))
             end
        | Mjnz ->
-          emit l (testq op1 op1);
+          let op1 = operand8 op in
+          let tmp_op = reg (register8 (register64 Register.tmp1)) in
+          emit l (movb op1 tmp_op);
+          emit_wl (testb tmp_op tmp_op);
           if not (Hashtbl.mem visited_labels l2) then
             begin
               need_label l1; emit_wl (jnz (l1 :> string)); lin ltl_map l2; lin ltl_map l1
@@ -145,6 +153,7 @@ and instr ltl_map l = function
               need_label l1; need_label l2; emit_wl (jnz (l1 :> string)); emit_wl (jmp (l2 :> string))
             end
        | Mjlei i32 ->
+          let op1 = operand op in
           emit l (cmpq (imm32 i32) op1);
           if not (Hashtbl.mem visited_labels l2) then
             begin
@@ -159,6 +168,7 @@ and instr ltl_map l = function
               need_label l1; need_label l2; emit_wl (jle (l1 :> string)); emit_wl (jmp (l2 :> string))
             end
        | Mjgi i32 ->
+          let op1 = operand op in
           emit l (cmpq (imm32 i32) op1);
           if not (Hashtbl.mem visited_labels l2) then
             begin
