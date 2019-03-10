@@ -120,57 +120,57 @@ and instr ltl_map l = function
           emit l (testq op1 op1);
           if not (Hashtbl.mem visited_labels l2) then
             begin
-              emit_wl (jz (l1 :> string)); lin ltl_map l2; lin ltl_map l1
+              need_label l1; emit_wl (jz (l1 :> string)); lin ltl_map l2; lin ltl_map l1
             end
           else if not (Hashtbl.mem visited_labels l1) then
             begin
-              emit_wl (jnz (l2 :> string)); lin ltl_map l1; lin ltl_map l2
+              need_label l2; emit_wl (jnz (l2 :> string)); lin ltl_map l1; lin ltl_map l2
             end
           else
             begin
-              emit_wl (jz (l1 :> string)); emit_wl (jmp (l2 :> string))
+              need_label l1; need_label l2; emit_wl (jz (l1 :> string)); emit_wl (jmp (l2 :> string))
             end
        | Mjnz ->
           emit l (testq op1 op1);
           if not (Hashtbl.mem visited_labels l2) then
             begin
-              emit_wl (jnz (l1 :> string)); lin ltl_map l2; lin ltl_map l1
+              need_label l1; emit_wl (jnz (l1 :> string)); lin ltl_map l2; lin ltl_map l1
             end
           else if not (Hashtbl.mem visited_labels l1) then
             begin
-              emit_wl (jz (l2 :> string)); lin ltl_map l1; lin ltl_map l2
+              need_label l2; emit_wl (jz (l2 :> string)); lin ltl_map l1; lin ltl_map l2
             end
           else
             begin
-              emit_wl (jnz (l1 :> string)); emit_wl (jmp (l2 :> string))
+              need_label l1; need_label l2; emit_wl (jnz (l1 :> string)); emit_wl (jmp (l2 :> string))
             end
        | Mjlei i32 ->
           emit l (cmpq (imm32 i32) op1);
           if not (Hashtbl.mem visited_labels l2) then
             begin
-              emit_wl (jle (l1 :> string)); lin ltl_map l2; lin ltl_map l1
+              need_label l1; emit_wl (jle (l1 :> string)); lin ltl_map l2; lin ltl_map l1
             end
           else if not (Hashtbl.mem visited_labels l1) then
             begin
-              emit_wl (jg (l2 :> string)); lin ltl_map l1; lin ltl_map l2
+              need_label l2; emit_wl (jg (l2 :> string)); lin ltl_map l1; lin ltl_map l2
             end
           else
             begin
-              emit_wl (jle (l1 :> string)); emit_wl (jmp (l2 :> string))
+              need_label l1; need_label l2; emit_wl (jle (l1 :> string)); emit_wl (jmp (l2 :> string))
             end
        | Mjgi i32 ->
           emit l (cmpq (imm32 i32) op1);
           if not (Hashtbl.mem visited_labels l2) then
             begin
-              emit_wl (jg (l1 :> string)); lin ltl_map l2; lin ltl_map l1
+              need_label l1; emit_wl (jg (l1 :> string)); lin ltl_map l2; lin ltl_map l1
             end
           else if not (Hashtbl.mem visited_labels l1) then
             begin
-              emit_wl (jle (l2 :> string)); lin ltl_map l1; lin ltl_map l2
+              need_label l2; emit_wl (jle (l2 :> string)); lin ltl_map l1; lin ltl_map l2
             end
           else
             begin
-              emit_wl (jg (l1 :> string)); emit_wl (jmp (l2 :> string))
+              need_label l1; need_label l2; emit_wl (jg (l1 :> string)); emit_wl (jmp (l2 :> string))
             end
      end
   | Embbranch (branch, op1, op2, l1, l2) ->
@@ -182,28 +182,28 @@ and instr ltl_map l = function
        | Mjl ->
           if not (Hashtbl.mem visited_labels l2) then
             begin
-              emit_wl (jl (l1 :> string)); lin ltl_map l2; lin ltl_map l1
+              need_label l1; emit_wl (jl (l1 :> string)); lin ltl_map l2; lin ltl_map l1
             end
           else if not (Hashtbl.mem visited_labels l1) then
             begin
-              emit_wl (jge (l2 :> string)); lin ltl_map l1; lin ltl_map l2
+              need_label l2; emit_wl (jge (l2 :> string)); lin ltl_map l1; lin ltl_map l2
             end
           else
             begin
-              emit_wl (jl (l1 :> string)); emit_wl (jmp (l2 :> string))
+              need_label l1; need_label l2; emit_wl (jl (l1 :> string)); emit_wl (jmp (l2 :> string))
             end
        | Mjle ->
           if not (Hashtbl.mem visited_labels l2) then
             begin
-              emit_wl (jle (l1 :> string)); lin ltl_map l2; lin ltl_map l1
+              need_label l1; emit_wl (jle (l1 :> string)); lin ltl_map l2; lin ltl_map l1
             end
           else if not (Hashtbl.mem visited_labels l1) then
             begin
-              emit_wl (jg (l2 :> string)); lin ltl_map l1; lin ltl_map l2
+              need_label l2; emit_wl (jg (l2 :> string)); lin ltl_map l1; lin ltl_map l2
             end
           else
             begin
-              emit_wl (jle (l1 :> string)); emit_wl (jmp (l2 :> string))
+              need_label l1; need_label l2; emit_wl (jle (l1 :> string)); emit_wl (jmp (l2 :> string))
             end
      end
   | Epush (op, l1) ->
@@ -211,8 +211,7 @@ and instr ltl_map l = function
      emit l (pushq op); lin ltl_map l1
   | Ecall (id, l1) ->
      let fun_def = get_fun_entry id in
-     let fun_entry = fun_def.fun_entry in
-     need_label fun_entry; emit l (call (fun_entry :> string)); lin ltl_map l1
+     emit l (call fun_def.fun_name); lin ltl_map l1
   | Epop (r, l1) ->
      emit l (popq (register64 r)); lin ltl_map l1
 
@@ -233,9 +232,10 @@ let concatenate_asm_text asm_text = function
 
 let program (file : Ltltree.file) =
   funs := file.funs;
-  let code_text = ref nop in
+  let code_text = ref (nop ++ (globl "main")) in
   let add_function_code (fun_def : Ltltree.deffun) =
     let new_code_text_fragment = translate_function fun_def in
+    code_text := !code_text ++ (label fun_def.fun_name);
     code_text := List.fold_left concatenate_asm_text !code_text new_code_text_fragment in
   List.iter add_function_code !funs;
   {text = !code_text; data = nop}
