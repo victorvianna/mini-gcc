@@ -150,6 +150,7 @@ let rec stmt (s:Ttree.stmt) destl retr exitl = match s with
   testl
 
 let deffun (f:Ttree.decl_fun) =
+  graph := Label.M.empty;
   let r = Register.fresh () in
   let l = Label.fresh () in
   let get_name decl_var = match decl_var with

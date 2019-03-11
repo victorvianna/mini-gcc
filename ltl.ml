@@ -367,7 +367,7 @@ let instr c frame_size n_pars = function
      translate_Epush_param r l c
     
 let translate_fun (f:Ertltree.deffun) =
-  let l_info = Ertl.liveness !Ertl.graph in
+  let l_info = Ertl.liveness f.fun_body in
   let interf_graph = make l_info in
   let colors = color_graph interf_graph in
   let color_map = fst colors in

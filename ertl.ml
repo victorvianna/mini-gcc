@@ -129,6 +129,7 @@ let restore_callee_saved l =
     in aux 0 l [] (List.rev Register.callee_saved)
 
 let translate_fun (f : Rtltree.deffun) =
+    graph := Label.M.empty;
     let fun_name = f.fun_name in
     let fun_formals = List.length f.fun_formals in
     let fun_entry = f.fun_entry in
