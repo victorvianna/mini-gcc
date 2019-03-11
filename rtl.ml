@@ -38,22 +38,61 @@ let rec naive_apply_binop op (e1:Ttree.expr) (e2:Ttree.expr) destr destl =
 
 and
 
+apply_binop_two_consts (op:Ttree.binop) c1 c2 destr destl =
+let int32_of_bool b =
+  Int32.of_int (if b then 1 else 0) in
+match op with
+  | Beq -> generate (Econst(int32_of_bool (Int32.equal c1 c2), destr, destl))
+  | Bneq -> generate (Econst(int32_of_bool (not (Int32.equal c1 c2)), destr, destl))
+  | Blt -> generate (Econst(int32_of_bool (Int32.compare c1 c2 < 0), destr, destl))
+  | Ble -> generate (Econst(int32_of_bool (Int32.compare c1 c2 <= 0), destr, destl))
+  | Bgt -> generate (Econst(int32_of_bool (Int32.compare c1 c2 > 0), destr, destl))
+  | Bge -> generate (Econst(int32_of_bool (Int32.compare c1 c2 >= 0), destr, destl))
+  | Badd -> generate (Econst(Int32.add c1 c2, destr, destl))
+  | Bsub -> generate (Econst(Int32.sub c1 c2, destr, destl))
+  | Bmul -> generate (Econst(Int32.mul c1 c2, destr, destl))
+  (* if dividend is 0, compile naively to fail during execution *)
+  | Bdiv -> generate (Econst(Int32.div c1 c2, destr, destl))
+  | Band -> generate (Econst(int32_of_bool(not (Int32.equal c1  0l) && not (Int32.equal c2  0l)), destr, destl))
+  | Bor -> generate (Econst(int32_of_bool(not (Int32.equal c1  0l) || not (Int32.equal c2  0l)), destr, destl))
+
+and
+
+apply_binop_one_const (op:Ttree.binop) (e:Ttree.expr) c destr destl =
+  let r = Register.fresh () in
+  let destl =
+    match op with
+    | Badd -> generate(Emunop(Maddi c, destr, destl))
+    | Bsub -> generate(Emunop(Maddi (Int32.neg c), destr, destl))
+    | Beq -> generate(Emunop(Msetei c, destr, destl))
+    | Bneq -> generate(Emunop(Msetnei c, destr, destl))
+  in
+  expr e destr destl
+
+and
+
 expr (e:Ttree.expr) (destr:register) (destl:label) : label = match e.expr_node with
   | Ttree.Econst e -> generate (Econst(e, destr, destl))
   | Ttree.Ebinop (op, e1, e2)  ->
     begin
-      match op with
-      | Beq -> naive_apply_binop Msete e1 e2 destr destl
-      | Bneq -> naive_apply_binop Msetne e1 e2 destr destl
-      | Blt -> naive_apply_binop Msetl e1 e2 destr destl
-      | Ble -> naive_apply_binop Msetle e1 e2 destr destl
-      | Bgt -> naive_apply_binop Msetg e1 e2 destr destl
-      | Bge -> naive_apply_binop Msetge e1 e2 destr destl
-      | Badd -> naive_apply_binop Madd e1 e2 destr destl
-      | Bsub -> naive_apply_binop Msub e1 e2 destr destl
-      | Bmul -> naive_apply_binop Mmul e1 e2 destr destl
-      | Bdiv -> naive_apply_binop Mdiv e1 e2 destr destl
-      | Band ->
+      match (op, e1.expr_node, e2.expr_node) with
+      | (op, (Ttree.Econst c1), (Ttree.Econst c2)) when op != Bdiv && not (Int32.equal c2 0l) ->
+        apply_binop_two_consts op c1 c2 destr destl
+      | (op, (Ttree.Econst c), e) when op == Badd || op == Bsub || op == Beq || op == Bneq ->
+        apply_binop_one_const op e2 c destr destl
+      | (op, e, Ttree.Econst c) when op == Badd || op == Bsub || op == Beq || op == Bneq ->
+        apply_binop_one_const op e1 c destr destl
+      | (Beq, _, _) -> naive_apply_binop Msete e1 e2 destr destl
+      | (Bneq, _, _) -> naive_apply_binop Msetne e1 e2 destr destl
+      | (Blt, _, _) -> naive_apply_binop Msetl e1 e2 destr destl
+      | (Ble, _, _) -> naive_apply_binop Msetle e1 e2 destr destl
+      | (Bgt, _, _) -> naive_apply_binop Msetg e1 e2 destr destl
+      | (Bge, _, _) -> naive_apply_binop Msetge e1 e2 destr destl
+      | (Badd, _, _) -> naive_apply_binop Madd e1 e2 destr destl
+      | (Bsub, _, _) -> naive_apply_binop Msub e1 e2 destr destl
+      | (Bmul, _, _) -> naive_apply_binop Mmul e1 e2 destr destl
+      | (Bdiv, _, _) -> naive_apply_binop Mdiv e1 e2 destr destl
+      | (Band, _, _) ->
       (* convert to 0 or 1 *)
       let normalize = generate(Emunop(Msetnei Int32.zero, destr, destl)) in
       (* if e1 is false, we proceed, otherwise we calculate e2;
@@ -61,7 +100,7 @@ expr (e:Ttree.expr) (destr:register) (destl:label) : label = match e.expr_node w
       let calculate_second = expr e1 destr normalize in
       let testl = generate (Emubranch (Mjz, destr, normalize, calculate_second)) in
       expr e2 destr testl
-      | Bor ->
+      | (Bor, _, _) ->
       (* convert to 0 or 1 *)
       let normalize = generate(Emunop(Msetnei Int32.zero, destr, destl)) in
       (* if e1 is true, we proceed, otherwise we calculate e2;
