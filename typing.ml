@@ -326,13 +326,13 @@ let process_dstr (dstr : Ptree.decl_struct) =
                 if Hashtbl.mem struct_map id.id
                     then Tstructp (Hashtbl.find struct_map id.id)
                     else raise_error "Undefined structure" id.id_loc in
-    let add_decl_var_to_htbl (t, id : Ptree.typ * Ptree.ident) =
+    let add_decl_var_to_htbl index (t, id : Ptree.typ * Ptree.ident) =
         if Hashtbl.mem htbl id.id
             then raise_error "Variable already defined"
                 id.id_loc
             else
-        Hashtbl.add htbl id.id {field_name = id.id; field_typ = (translate_type t)} in
-    List.iter add_decl_var_to_htbl fields_list
+                Hashtbl.add htbl id.id {field_name = id.id; field_typ = (translate_type t); field_pos = index } in
+    List.iteri add_decl_var_to_htbl fields_list
 
 let program p =
     add_fun_sbrk ();
