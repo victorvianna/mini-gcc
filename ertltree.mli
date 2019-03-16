@@ -4,7 +4,7 @@
 open Ops
 
 type ident = string
-  (** uniquement pour les fonctions *)
+(** uniquement pour les fonctions *)
 
 type register = Register.t
 
@@ -22,17 +22,17 @@ type instr =
   | Embbranch of mbbranch * register * register * label * label
   | Egoto of label
   | Ecall of ident * int * label
-      (** l'entier est le nombre de paramètres passés dans des registres *)
+  (** l'entier est le nombre de paramètres passés dans des registres *)
   | Ealloc_frame of label
   | Edelete_frame of label
   | Eget_param of int * register * label
-      (** [r <- ofs(rbp)] *)
+  (** [r <- ofs(rbp)] *)
   | Epush_param of register * label
   | Ereturn
 
 type cfg = instr Label.map
-  (** Un graphe de flot de contrôle est un dictionnaire associant à des
-      étiquettes des instructions ERTL. *)
+(** Un graphe de flot de contrôle est un dictionnaire associant à des
+    étiquettes des instructions ERTL. *)
 
 (** Une fonction ERTL. *)
 type deffun = {
@@ -51,13 +51,13 @@ type file = {
 (** {2 Quelques fonctions qui seront utiles pour la phase suivante} *)
 
 val succ: instr -> label list
-  (** successeurs dans le graphe *)
+(** successeurs dans le graphe *)
 
 val def_use: instr -> register list * register list
-  (** calcul des définitions et utilisations de chaque instruction *)
+(** calcul des définitions et utilisations de chaque instruction *)
 
 val visit: (label -> instr -> unit) -> cfg -> label -> unit
-  (** visite le graphe de flot de contrôle à partir d'une étiquette donnée *)
+(** visite le graphe de flot de contrôle à partir d'une étiquette donnée *)
 
 (** {2 Fonctions d'impression, pour debugger} *)
 

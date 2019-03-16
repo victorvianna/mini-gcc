@@ -4,7 +4,7 @@
 open Ops
 
 type ident = string
-  (** uniquement pour les fonctions *)
+(** uniquement pour les fonctions *)
 
 type register = Register.t
 
@@ -22,17 +22,17 @@ type instr =
   | Embbranch of mbbranch * register * register * label * label
   | Egoto of label
   | Ecall of ident * int * label
-      (** l'entier est le nombre de paramètres passés dans des registres *)
+  (** l'entier est le nombre de paramètres passés dans des registres *)
   | Ealloc_frame of label
   | Edelete_frame of label
   | Eget_param of int * register * label
-      (** [r <- ofs(rbp)] *)
+  (** [r <- ofs(rbp)] *)
   | Epush_param of register * label
   | Ereturn
 
 type cfg = instr Label.map
-  (** Un graphe de flot de contrôle est un dictionnaire associant à des
-      étiquettes des instructions ERTL. *)
+(** Un graphe de flot de contrôle est un dictionnaire associant à des
+    étiquettes des instructions ERTL. *)
 
 (** Une fonction ERTL. *)
 type deffun = {
@@ -58,31 +58,31 @@ let rec prefix i = function
 let def_use = function
   | Econst (_,r,_)
   | Eget_param (_,r,_) ->
-      [r], []
+    [r], []
   | Emubranch (_,r,_,_)
   | Epush_param (r,_) ->
-      [], [r]
+    [], [r]
   | Emunop (_,rd,_) ->
-      [rd], [rd]
+    [rd], [rd]
   | Embinop (Ops.Mmov,rs,rd,_)
   | Eload (rs,_,rd,_) ->
-      [rd], [rs]
+    [rd], [rs]
   | Embinop (Ops.Mdiv,rs,rd,_) ->
-      assert (rd = Register.rax);
-      [Register.rax; Register.rdx], [Register.rax; Register.rdx; rs]
+    assert (rd = Register.rax);
+    [Register.rax; Register.rdx], [Register.rax; Register.rdx; rs]
   | Embinop (_,rs,rd,_) ->
-      [rd], [rs; rd]
+    [rd], [rs; rd]
   | Estore (r1,r2,_,_)
   | Embbranch (_,r1,r2,_,_) ->
-      [], [r1; r2]
+    [], [r1; r2]
   | Ecall (_,n,_) ->
-      Register.caller_saved, prefix n Register.parameters
+    Register.caller_saved, prefix n Register.parameters
   | Egoto _
   | Ealloc_frame _
   | Edelete_frame _ ->
-      [], []
+    [], []
   | Ereturn ->
-      [], Register.rax :: Register.callee_saved
+    [], Register.rax :: Register.callee_saved
 
 (** {2 Fonctions d'impression, pour debugger} *)
 
@@ -91,43 +91,43 @@ open Pp
 
 let print_instr fmt = function
   | Econst (n, r, l) ->
-      fprintf fmt "mov $%ld %a  --> %a" n Register.print r Label.print l
+    fprintf fmt "mov $%ld %a  --> %a" n Register.print r Label.print l
   | Eload (r1, n, r2, l) ->
-      fprintf fmt "mov %d(%a) %a  --> %a"
-        n Register.print r1 Register.print r2 Label.print l
+    fprintf fmt "mov %d(%a) %a  --> %a"
+      n Register.print r1 Register.print r2 Label.print l
   | Estore (r1, r2, n, l) ->
-      fprintf fmt "mov %a %d(%a)  --> %a"
-        Register.print r1 n Register.print r2 Label.print l
+    fprintf fmt "mov %a %d(%a)  --> %a"
+      Register.print r1 n Register.print r2 Label.print l
   | Emunop (op, r1, l) ->
-      fprintf fmt "%a %a  --> %a"
-        print_munop op Register.print r1 Label.print l
+    fprintf fmt "%a %a  --> %a"
+      print_munop op Register.print r1 Label.print l
   | Embinop (Mmov, r1, r2, l) ->
-      fprintf fmt "mov %a %a  --> %a"
-        Register.print r1 Register.print r2 Label.print l
+    fprintf fmt "mov %a %a  --> %a"
+      Register.print r1 Register.print r2 Label.print l
   | Embinop (op, r1, r2, l) ->
-      fprintf fmt "%a %a %a  --> %a"
-	print_mbinop op Register.print r1 Register.print r2 Label.print l
+    fprintf fmt "%a %a %a  --> %a"
+      print_mbinop op Register.print r1 Register.print r2 Label.print l
   | Emubranch (op, r, l1, l2) ->
-      fprintf fmt "%a %a  --> %a, %a"
-	print_mubranch op Register.print r Label.print l1 Label.print l2
+    fprintf fmt "%a %a  --> %a, %a"
+      print_mubranch op Register.print r Label.print l1 Label.print l2
   | Embbranch (op, r1, r2, l1, l2) ->
-      fprintf fmt "%a %a %a  --> %a, %a"
-	print_mbbranch op Register.print r1 Register.print r2
-        Label.print l1 Label.print l2
+    fprintf fmt "%a %a %a  --> %a, %a"
+      print_mbbranch op Register.print r1 Register.print r2
+      Label.print l1 Label.print l2
   | Egoto l ->
-      fprintf fmt "goto %a" Label.print l
+    fprintf fmt "goto %a" Label.print l
   | Ecall (x, n, l) ->
-      fprintf fmt "call %s(%d)  --> %a" x n Label.print l
+    fprintf fmt "call %s(%d)  --> %a" x n Label.print l
   | Ealloc_frame l ->
-      fprintf fmt "alloc_frame  --> %a" Label.print l
+    fprintf fmt "alloc_frame  --> %a" Label.print l
   | Edelete_frame l ->
-      fprintf fmt "delete_frame  --> %a" Label.print l
+    fprintf fmt "delete_frame  --> %a" Label.print l
   | Eget_param (n, r, l) ->
-      fprintf fmt "mov stackp(%d) %a --> %a" n Register.print r Label.print l
+    fprintf fmt "mov stackp(%d) %a --> %a" n Register.print r Label.print l
   | Epush_param (r, l) ->
-      fprintf fmt "push %a  --> %a" Register.print r Label.print l
+    fprintf fmt "push %a  --> %a" Register.print r Label.print l
   | Ereturn ->
-      fprintf fmt "return"
+    fprintf fmt "return"
 
 let succ = function
   | Econst (_,_,l)
@@ -141,12 +141,12 @@ let succ = function
   | Edelete_frame l
   | Eget_param (_,_,l)
   | Epush_param (_,l) ->
-      [l]
+    [l]
   | Emubranch (_,_,l1,l2)
   | Embbranch (_,_,_,l1,l2) ->
-      [l1; l2]
+    [l1; l2]
   | Ereturn ->
-      []
+    []
 
 let visit f g entry =
   let visited = Hashtbl.create 97 in

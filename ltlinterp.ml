@@ -11,7 +11,7 @@ exception Error of string
 let error s = raise (Error s)
 
 type state = {
-     mem: Machine.t;
+  mem: Machine.t;
   fundef: (string, deffun) Hashtbl.t;
 }
 

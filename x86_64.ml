@@ -131,12 +131,12 @@ let fmt = formatter_of_buffer buf
 let ins x =
   Buffer.add_char buf '\t';
   kfprintf (fun fmt ->
-    fprintf fmt "\n";
-    pp_print_flush fmt ();
-    let s = Buffer.contents buf in
-    Buffer.clear buf;
-    S s
-  ) fmt x
+      fprintf fmt "\n";
+      pp_print_flush fmt ();
+      let s = Buffer.contents buf in
+      Buffer.clear buf;
+      S s
+    ) fmt x
 
 let pr_list fmt pr = function
   | []      -> ()

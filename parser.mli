@@ -1,7 +1,7 @@
 
 (* The type of tokens. *)
 
-type token = 
+type token =
   | WHILE
   | VERTICALBARVERTICALBAR
   | STRUCT

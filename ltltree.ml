@@ -4,7 +4,7 @@
 open Ops
 
 type ident = string
-  (** uniquement pour les fonctions *)
+(** uniquement pour les fonctions *)
 
 type register = Register.t
 
@@ -36,8 +36,8 @@ type instr =
   | Epop of register * label
 
 type cfg = instr Label.map
-  (** Un graphe de flot de contrôle est un dictionnaire associant à des
-      étiquettes des instructions LTL. *)
+(** Un graphe de flot de contrôle est un dictionnaire associant à des
+    étiquettes des instructions LTL. *)
 
 (** une fonction LTL *)
 type deffun = {
@@ -62,37 +62,37 @@ let print_operand fmt = function
 
 let print_instr fmt = function
   | Econst (n, r, l) ->
-      fprintf fmt "mov $%ld %a  --> %a" n print_operand r Label.print l
+    fprintf fmt "mov $%ld %a  --> %a" n print_operand r Label.print l
   | Eload (r1, n, r2, l) ->
-      fprintf fmt "load %d(%a) %a  --> %a"
-        n Register.print r1 Register.print r2 Label.print l
+    fprintf fmt "load %d(%a) %a  --> %a"
+      n Register.print r1 Register.print r2 Label.print l
   | Estore (r1, r2, n, l) ->
-      fprintf fmt "store %a %d(%a)  --> %a"
-        Register.print r1 n Register.print r2 Label.print l
+    fprintf fmt "store %a %d(%a)  --> %a"
+      Register.print r1 n Register.print r2 Label.print l
   | Emunop (op, r1, l) ->
-      fprintf fmt "%a %a  --> %a" print_munop op print_operand r1 Label.print l
+    fprintf fmt "%a %a  --> %a" print_munop op print_operand r1 Label.print l
   | Embinop (Mmov, r1, r2, l) ->
-      fprintf fmt "mov %a %a  --> %a" print_operand r1 print_operand r2 Label.print l
+    fprintf fmt "mov %a %a  --> %a" print_operand r1 print_operand r2 Label.print l
   | Embinop (op, r1, r2, l) ->
-      fprintf fmt "%a %a %a  --> %a"
-	print_mbinop op print_operand r1 print_operand r2 Label.print l
+    fprintf fmt "%a %a %a  --> %a"
+      print_mbinop op print_operand r1 print_operand r2 Label.print l
   | Emubranch (op, r, l1, l2) ->
-      fprintf fmt "%a %a  --> %a, %a"
-	print_mubranch op print_operand r Label.print l1 Label.print l2
+    fprintf fmt "%a %a  --> %a, %a"
+      print_mubranch op print_operand r Label.print l1 Label.print l2
   | Embbranch (op, r1, r2, l1, l2) ->
-      fprintf fmt "%a %a %a  --> %a, %a"
-	print_mbbranch op print_operand r1 print_operand r2
-        Label.print l1 Label.print l2
+    fprintf fmt "%a %a %a  --> %a, %a"
+      print_mbbranch op print_operand r1 print_operand r2
+      Label.print l1 Label.print l2
   | Epush (r, l) ->
-      fprintf fmt "push %a  --> %a" print_operand r Label.print l
+    fprintf fmt "push %a  --> %a" print_operand r Label.print l
   | Epop (r, l) ->
-      fprintf fmt "pop %a  --> %a" Register.print r Label.print l
+    fprintf fmt "pop %a  --> %a" Register.print r Label.print l
   | Egoto l ->
-      fprintf fmt "goto %a" Label.print l
+    fprintf fmt "goto %a" Label.print l
   | Ecall (x, l) ->
-      fprintf fmt "call %s  --> %a" x Label.print l
+    fprintf fmt "call %s  --> %a" x Label.print l
   | Ereturn ->
-      fprintf fmt "return"
+    fprintf fmt "return"
 
 let succ = function
   | Econst (_,_,l)
@@ -104,12 +104,12 @@ let succ = function
   | Epop (_,l)
   | Ecall (_,l)
   | Egoto l ->
-      [l]
+    [l]
   | Emubranch (_,_,l1,l2)
   | Embbranch (_,_,_,l1,l2) ->
-      [l1; l2]
+    [l1; l2]
   | Ereturn ->
-      []
+    []
 
 let visit f g entry =
   let visited = Hashtbl.create 97 in

@@ -47,11 +47,11 @@ let malloc m n =
   p
 
 let get st r =
- if Register.is_hw r then
-   try H.find st.hwregs r with Not_found -> zero
- else
-   try H.find st.regs r
-   with Not_found -> error ("unknown register " ^ (r :> string))
+  if Register.is_hw r then
+    try H.find st.hwregs r with Not_found -> zero
+  else
+    try H.find st.regs r
+    with Not_found -> error ("unknown register " ^ (r :> string))
 
 let set st r v =
   H.replace (if Register.is_hw r then st.hwregs else st.regs) r v

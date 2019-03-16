@@ -20,20 +20,20 @@ let set_file f s = f := s
 
 let options =
   ["--parse-only", Arg.Set parse_only,
-     "  stops after parsing";
+   "  stops after parsing";
    "--type-only", Arg.Set type_only,
-     "  stops after typing";
+   "  stops after typing";
    "--interp-rtl", Arg.Set interp_rtl,
-     "  interprets RTL (and does not compile)";
+   "  interprets RTL (and does not compile)";
    "--interp-ertl", Arg.Set interp_ertl,
-     "  interprets ERTL (and does not compile)";
+   "  interprets ERTL (and does not compile)";
    "--interp-ltl", Arg.Set interp_ltl,
-     "  interprets LTL (and does not compile)";
+   "  interprets LTL (and does not compile)";
    "--save-asm", Arg.Set save_asm,
-     "  prints asm (and does not compile)";
+   "  prints asm (and does not compile)";
    "--debug", Arg.Set debug,
-     "  debug mode";
-   ]
+   "  debug mode";
+  ]
 
 let usage = "usage: mini-c [options] file.c"
 
@@ -72,24 +72,24 @@ let () =
     if debug then X86_64.print_program std_formatter p;
     let asm_filename = (Filename.remove_extension !ifile ^ ".s") in
     X86_64.print_in_file ~file:asm_filename p
-    (* ... *)
+  (* ... *)
   with
-    | Lexer.Lexical_error c ->
-	localisation (Lexing.lexeme_start_p buf);
-	eprintf "lexical error: %s@." c;
-	exit 1
-    | Parser.Error ->
-	localisation (Lexing.lexeme_start_p buf);
-	eprintf "syntax error@.";
-	exit 1
-    | Typing.Error s->
-	eprintf "typing error: %s@." s;
-	exit 1
-    | e ->
-        let bt = Printexc.get_backtrace () in
-        eprintf "anomaly: %s\n@." (Printexc.to_string e);
-        eprintf "%s@." bt;
-	exit 2
+  | Lexer.Lexical_error c ->
+    localisation (Lexing.lexeme_start_p buf);
+    eprintf "lexical error: %s@." c;
+    exit 1
+  | Parser.Error ->
+    localisation (Lexing.lexeme_start_p buf);
+    eprintf "syntax error@.";
+    exit 1
+  | Typing.Error s->
+    eprintf "typing error: %s@." s;
+    exit 1
+  | e ->
+    let bt = Printexc.get_backtrace () in
+    eprintf "anomaly: %s\n@." (Printexc.to_string e);
+    eprintf "%s@." bt;
+    exit 2
 
 
 

@@ -4,7 +4,7 @@
 open Ops
 
 type ident = string
-  (** uniquement pour les fonctions *)
+(** uniquement pour les fonctions *)
 
 type register = Register.t
 
@@ -36,8 +36,8 @@ type instr =
   | Epop of register * label
 
 type cfg = instr Label.map
-  (** Un graphe de flot de contrôle est un dictionnaire associant à des
-      étiquettes des instructions LTL. *)
+(** Un graphe de flot de contrôle est un dictionnaire associant à des
+    étiquettes des instructions LTL. *)
 
 (** une fonction LTL *)
 type deffun = {
