@@ -5,10 +5,40 @@ exception Error of string
 
 let graph = ref Label.M.empty
 
+let function_name = ref ""
+let function_exit = ref (Label.fresh ())
+let function_label = ref (Label.fresh ())
+
 let generate i = (* should move this to a common file later *)
   let l = Label.fresh () in
   graph := Label.M.add l i !graph;
   l
+
+let optimize_tail_recursive rl =
+  let n_hw_registers = List.length Register.parameters in
+  let n_regs_stack = max (List.length rl - n_hw_registers) 0 in
+  let word_size = 8 in
+  let rec move_registers cnt ertl_instr =
+    begin function
+      | [] -> ertl_instr
+      | x :: tail ->
+        let new_l = generate ertl_instr in
+        if cnt = n_hw_registers - 1 then
+          let new_inst =
+            Embinop (Mmov, x, List.nth Register.parameters cnt, new_l)
+          in move_registers (cnt + 1) new_inst (List.rev tail)
+        else if cnt < n_hw_registers then
+          let new_inst =
+            Embinop (Mmov, x, List.nth Register.parameters cnt, new_l)
+          in move_registers (cnt + 1) new_inst tail
+        else
+          let shift = (n_regs_stack - cnt + 7) * word_size in
+          let new_inst =
+            Estore (x, Register.rbp, shift, new_l)
+          in move_registers (cnt + 1) new_inst tail
+    end in
+  let jump_instr = Egoto !function_label in
+  move_registers 0 jump_instr rl
 
 let instr = function
   | Rtltree.Econst (r, n, destl) ->
@@ -36,36 +66,39 @@ let instr = function
   | Rtltree.Egoto (destl) ->
     Egoto (destl)
   | Rtltree.Ecall (r, f, rl, l) ->
-    let n_hw_registers = List.length Register.parameters in
-    let n_regs_stack = max (List.length rl - n_hw_registers) 0 in
-    let word_size = 8 in
-    let rec move_registers cnt destl ertl_instr =
-      begin function
-        | [] -> ertl_instr
-        | x :: tail ->
-          let new_l = generate ertl_instr in
-          if cnt = n_hw_registers - 1 then
-            let new_inst =
-              Embinop (Mmov, x, List.nth Register.parameters cnt, new_l)
-            in move_registers (cnt + 1) new_l new_inst (List.rev tail)
-          else if cnt < n_hw_registers then
-            let new_inst =
-              Embinop (Mmov, x, List.nth Register.parameters cnt, new_l)
-            in move_registers (cnt + 1) new_l new_inst tail
-          else
-            let new_inst = Epush_param (x, new_l)
-            in move_registers (cnt + 1) new_l new_inst tail
-      end in
-    (* pop parameters passed on the stack *)
-    let l = if n_regs_stack > 0 then
-        let shift = n_regs_stack * word_size in
-        generate (Emunop (Maddi (Int32.of_int shift), Register.rsp, l))
-      else l in
-    (* move return value to register r *)
-    let l = generate (Embinop (Mmov, Register.result, r, l)) in
-    (* call function *)
-    let call_instr = Ecall (f, List.length rl - n_regs_stack, l) in
-    move_registers 0 l call_instr rl
+    if f = !function_name && l = !function_exit then
+      optimize_tail_recursive rl
+    else
+      let n_hw_registers = List.length Register.parameters in
+      let n_regs_stack = max (List.length rl - n_hw_registers) 0 in
+      let word_size = 8 in
+      let rec move_registers cnt destl ertl_instr =
+        begin function
+          | [] -> ertl_instr
+          | x :: tail ->
+            let new_l = generate ertl_instr in
+            if cnt = n_hw_registers - 1 then
+              let new_inst =
+                Embinop (Mmov, x, List.nth Register.parameters cnt, new_l)
+              in move_registers (cnt + 1) new_l new_inst (List.rev tail)
+            else if cnt < n_hw_registers then
+              let new_inst =
+                Embinop (Mmov, x, List.nth Register.parameters cnt, new_l)
+              in move_registers (cnt + 1) new_l new_inst tail
+            else
+              let new_inst = Epush_param (x, new_l)
+              in move_registers (cnt + 1) new_l new_inst tail
+        end in
+      (* pop parameters passed on the stack *)
+      let l = if n_regs_stack > 0 then
+          let shift = n_regs_stack * word_size in
+          generate (Emunop (Maddi (Int32.of_int shift), Register.rsp, l))
+        else l in
+      (* move return value to register r *)
+      let l = generate (Embinop (Mmov, Register.result, r, l)) in
+      (* call function *)
+      let call_instr = Ecall (f, List.length rl - n_regs_stack, l) in
+      move_registers 0 l call_instr rl
 
 
 let _succ = function
@@ -86,10 +119,19 @@ let generate_alloc_frame first_instr =
   Ealloc_frame l
 
 let save_callee_saved_regs first_instr fresh_regs =
+  let first_iter = ref true in
   let rec aux instr regs = function
     | [] -> instr
     | x :: tl ->
-      let l = generate instr in
+      let l =
+        if !first_iter then
+          begin
+            first_iter := false;
+            graph := Label.M.add !function_label instr !graph;
+            !function_label
+          end
+        else generate instr
+      in
       let fresh_reg = List.hd regs in
       let new_instr =
         Embinop (Mmov, x, fresh_reg, l) in
@@ -129,6 +171,9 @@ let restore_callee_saved l =
   in aux 0 l [] (List.rev Register.callee_saved)
 
 let translate_fun (f : Rtltree.deffun) =
+  function_name := f.fun_name;
+  function_exit := f.fun_exit;
+  function_label := Label.fresh ();
   graph := Label.M.empty;
   let fun_name = f.fun_name in
   let fun_formals = List.length f.fun_formals in
@@ -143,6 +188,7 @@ let translate_fun (f : Rtltree.deffun) =
   let visit f g entry =
     let visited = Hashtbl.create 97 in
     let () = Hashtbl.add visited fun_exit () in
+    let () = Hashtbl.add visited !function_label () in
     let rec visit l =
       if not (Hashtbl.mem visited l) then
         let () = Hashtbl.add visited l () in
