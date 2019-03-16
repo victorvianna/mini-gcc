@@ -52,7 +52,6 @@ and
   let destl =
     match op with
     | Badd -> generate(Emunop(Maddi c, destr, destl))
-    | Bsub -> generate(Emunop(Maddi (Int32.neg c), destr, destl))
     | Beq -> generate(Emunop(Msetei c, destr, destl))
     | Bneq -> generate(Emunop(Msetnei c, destr, destl))
     | _ -> raise (Error "apply_binop_one_const applied to invalid operation")
@@ -68,10 +67,12 @@ and
       match (op, e1.expr_node, e2.expr_node) with
       | (op, (Ttree.Econst c1), (Ttree.Econst c2)) when op != Bdiv && not (Int32.equal c2 0l) ->
         apply_binop_two_consts op c1 c2 destr destl
-      | (op, (Ttree.Econst c), e) when op == Badd || op == Bsub || op == Beq || op == Bneq ->
+      | (op, (Ttree.Econst c), e) when op = Badd || op = Beq || op = Bneq ->
         apply_binop_one_const op e2 c destr destl
-      | (op, e, Ttree.Econst c) when op == Badd || op == Bsub || op == Beq || op == Bneq ->
+      | (op, e, Ttree.Econst c) when op = Badd || op = Beq || op = Bneq ->
         apply_binop_one_const op e1 c destr destl
+      | (Bsub, e, Ttree.Econst c) ->
+        apply_binop_one_const Badd e1 (Int32.neg c) destr destl
       | (Beq, _, _) -> naive_apply_binop Msete e1 e2 destr destl
       | (Bneq, _, _) -> naive_apply_binop Msetne e1 e2 destr destl
       | (Blt, _, _) -> naive_apply_binop Msetl e1 e2 destr destl
@@ -99,13 +100,20 @@ and
         let testl = generate (Emubranch (Mjnz, destr, normalize, calculate_second)) in
         expr e2 destr testl
     end
-  | Ttree.Eunop (op, e)  ->
+  | Ttree.Eunop(Uminus, e) ->
     begin
-      match op with
-      | Uminus ->
+      match e.expr_node with
+      | Econst c -> generate(Econst ((Int32.neg c), destr, destl))
+      (* cannot use apply_binop_one_const on the next line *)
+      | _ ->
         let (zero_expr:Ttree.expr) = {expr_typ = Ttree.Tint; expr_node = (Ttree.Econst Int32.zero)} in
         naive_apply_binop Msub zero_expr e destr destl
-      | Unot ->
+    end
+  | Eunop(Unot, e) ->
+    begin
+      match e.expr_node with
+      | Econst c -> apply_binop_two_consts Beq 0l c destr destl
+      | _ ->
         let destl = generate(Emunop(Msetei Int32.zero, destr, destl)) in
         expr e destr destl
     end
