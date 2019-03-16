@@ -59,7 +59,6 @@ let get_fun_typ (dfun : Ptree.decl_fun) : typ =
     match (dfun.fun_typ : Ptree.typ) with
     | Ptree.Tint -> Tint
     | Ptree.Tstructp id -> Tstructp (Hashtbl.find struct_map id.id)
-    | _ -> raise (Error "Wrong function return type")
 
 let get_decl_var (decl: Ptree.decl_var) =
     match decl with
@@ -129,12 +128,16 @@ let rec get_expr (e : Ptree.expr) =
     | Ptree.Esizeof _ -> get_expr_sizeof e
 and
 get_expr_const (e : Ptree.expr) =
-    let Ptree.Econst i = e.expr_node in
+    let i = match e.expr_node with
+    Ptree.Econst i -> i | _ -> raise (Error "get_expr_const on non Econst")
+    in
     let expr_type = if i = 0l then Ttypenull else Tint in
     {expr_node = Econst i; expr_typ = expr_type}
 and
 get_expr_unop (e : Ptree.expr) =
-    let Ptree.Eunop (op, e1) = e.expr_node in
+    let (op, e1) = match e.expr_node with
+    Ptree.Eunop (op, e1) -> (op, e1) | _ -> raise (Error "get_expr_unop on non Eunop")
+    in
     let e2 = get_expr e1 in
     match op with
     | Ptree.Uminus ->
@@ -144,7 +147,9 @@ get_expr_unop (e : Ptree.expr) =
     | Ptree.Unot -> {expr_node = Eunop (op, e2); expr_typ = Tint}
 and
 get_expr_assign (e : Ptree.expr) =
-    let Ptree.Eassign(l, e1) = e.expr_node in
+    let (l, e1) = match e.expr_node with
+    Ptree.Eassign(l, e1) -> (l, e1) | _ -> raise (Error "get_expr_assign on non Eassign")
+    in
     let e2 = get_expr e1 in
     let e2 =
         begin
@@ -174,7 +179,9 @@ get_expr_assign (e : Ptree.expr) =
         end
 and
 get_expr_binop (e : Ptree.expr) =
-    let Ptree.Ebinop(bop, _e1, _e2) = e.expr_node in
+    let (bop, _e1, _e2) = match e.expr_node with
+    Ptree.Ebinop(bop, _e1, _e2) -> (bop, _e1, _e2) | _ -> raise(Error "get_expr_binop on non Ebinop")
+    in
     match bop with
     | Beq | Bneq | Blt | Ble | Bgt| Bge ->
         let e1 = get_expr _e1 in
@@ -194,7 +201,9 @@ get_expr_binop (e : Ptree.expr) =
         {expr_node = Ebinop (bop, e1, e2); expr_typ = Tint}
 and
 get_expr_call (e : Ptree.expr) =
-    let Ptree.Ecall (id, elist) = e.expr_node in
+    let (id, elist) = match e.expr_node with
+    Ptree.Ecall(id, elist) -> (id, elist) | _ -> raise (Error "get_expr_call on non Ecall")
+    in
     let fdecl_fun =
         try Hashtbl.find fun_map id.id
         with Not_found -> raise_error (Printf.sprintf "Undefined function \"%s\""
@@ -214,7 +223,9 @@ get_expr_call (e : Ptree.expr) =
     else raise_error "Invalid argument type" id.id_loc
 and
 get_expr_right (e : Ptree.expr) =
-    let Ptree.Eright l = e.expr_node in
+    let l = match e.expr_node with
+    Ptree.Eright l -> l | _ -> raise (Error "get_expr_right on non Eright")
+    in
     match l with
     | Ptree.Lident id ->
             begin
@@ -241,7 +252,9 @@ get_expr_right (e : Ptree.expr) =
             end
 and
 get_expr_sizeof (e : Ptree.expr) =
-    let Ptree.Esizeof id = e.expr_node in
+    let id = match e.expr_node with
+    Ptree.Esizeof id -> id | _ -> raise (Error "get_expr_sizeof on non Esizeof")
+    in
     let st = Hashtbl.find struct_map id.id in
     {expr_node = Esizeof st; expr_typ = Tint}
 

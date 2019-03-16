@@ -1,5 +1,7 @@
 open Rtltree
 
+exception Error of string
+
 let graph = ref Label.M.empty
 
 let generate i =
@@ -47,13 +49,13 @@ match op with
 and
 
 apply_binop_one_const (op:Ttree.binop) (e:Ttree.expr) c destr destl =
-  let r = Register.fresh () in
   let destl =
     match op with
     | Badd -> generate(Emunop(Maddi c, destr, destl))
     | Bsub -> generate(Emunop(Maddi (Int32.neg c), destr, destl))
     | Beq -> generate(Emunop(Msetei c, destr, destl))
     | Bneq -> generate(Emunop(Msetnei c, destr, destl))
+    | _ -> raise (Error "apply_binop_one_const applied to invalid operation")
   in
   expr e destr destl
 
@@ -117,6 +119,7 @@ expr (e:Ttree.expr) (destr:register) (destl:label) : label = match e.expr_node w
     let r_address = Register.fresh () in
     let destl = generate (Eload (r_address, field_index * Memory.word_size, destr, destl)) in
     expr e r_address destl
+    | _ -> raise (Error "tried to access field of non-struct")
   end
   | Ttree.Eassign_local (name, e) ->
     let r = Hashtbl.find !get_var_register name in
@@ -131,6 +134,7 @@ expr (e:Ttree.expr) (destr:register) (destl:label) : label = match e.expr_node w
     let destl = generate (Estore (destr, r_address, field_index * Memory.word_size, destl)) in
     let destl = expr e_value destr destl in
     expr e_address r_address destl
+    | _ -> raise (Error "tried to assign field of non-struct")
   end
   | Ttree.Ecall (name, expr_list) ->
   let new_registers = List.map (fun _ -> Register.fresh ()) expr_list in
@@ -155,7 +159,7 @@ let rec stmt (s:Ttree.stmt) destl retr exitl = match s with
   | Ttree.Sblock (decl_var_list, stmt_list) ->
     (* backup original variable-register bindings *)
     let ancient_get_var_register = Hashtbl.copy !get_var_register in
-    List.map allocate_variable decl_var_list;
+    ignore(List.map allocate_variable decl_var_list);
     let entry = List.fold_right (fun s l -> stmt s l retr exitl ) stmt_list destl in
     (* restore original variable-register bindings *)
     get_var_register := ancient_get_var_register;
@@ -180,9 +184,6 @@ let deffun (f:Ttree.decl_fun) =
   graph := Label.M.empty;
   let r = Register.fresh () in
   let l = Label.fresh () in
-  let get_name decl_var = match decl_var with
-    (_, name) -> name
-  in
   (* bind registers for function arguments and local variables *)
   let fun_formals = List.map allocate_variable f.fun_formals in
   let decl_locals = (function (d, _) -> d) f.fun_body in

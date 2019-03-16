@@ -134,7 +134,6 @@ let translate_fun (f : Rtltree.deffun) =
     let fun_formals = List.length f.fun_formals in
     let fun_entry = f.fun_entry in
     let fun_exit = f.fun_exit in
-    let fun_body = f.fun_body in
     let l = generate Ereturn in
     let l = generate (Edelete_frame l) in
     let (l, fresh_regs) = restore_callee_saved l in
