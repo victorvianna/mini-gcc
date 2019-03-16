@@ -2,7 +2,22 @@ open Rtltree
 
 exception Error of string
 
+(* hash table with physical equality *)
+module H = Hashtbl.Make(struct
+    type t = Ttree.expr
+    let equal = (==)
+    let hash = Hashtbl.hash
+  end)
+
 let graph = ref Label.M.empty
+
+(*
+Hashtbl for veryfing if an expression has been precalculated.
+It maps a Ttree.expr node to Some(c) if it evaluates to c,
+or None if we have already attempted to precompute but cannot
+do it in compilation time (e.g. it involves a variable value)
+*)
+let precalculated = H.create 10
 
 let generate i =
   let l = Label.fresh () in
@@ -19,7 +34,69 @@ let allocate_variable (decl_var:Ttree.decl_var) =
   Hashtbl.add !get_var_register name r;
   r
 
-let rec naive_apply_binop op (e1:Ttree.expr) (e2:Ttree.expr) destr destl =
+let was_precalculated e =
+  (H.mem precalculated e) && (H.find precalculated e != None)
+
+let compute_binop_csts (op:Ttree.binop) c1 c2 =
+  let int32_of_bool b = Int32.of_int (if b then 1 else 0) in
+  match op with
+  | Beq -> int32_of_bool (Int32.equal c1 c2)
+  | Bneq -> int32_of_bool (not (Int32.equal c1 c2))
+  | Blt -> int32_of_bool (Int32.compare c1 c2 < 0)
+  | Ble -> int32_of_bool (Int32.compare c1 c2 <= 0)
+  | Bgt -> int32_of_bool (Int32.compare c1 c2 > 0)
+  | Bge -> int32_of_bool (Int32.compare c1 c2 >= 0)
+  | Badd -> Int32.add c1 c2
+  | Bsub -> Int32.sub c1 c2
+  | Bmul -> Int32.mul c1 c2
+  | Bdiv -> Int32.div c1 c2
+  | Band -> int32_of_bool(not (Int32.equal c1  0l) && not (Int32.equal c2  0l))
+  | Bor -> int32_of_bool(not (Int32.equal c1  0l) || not (Int32.equal c2  0l))
+
+
+let compute_unop_cst (op:Ttree.unop) c = match op with
+  | Uminus -> compute_binop_csts Bsub 0l c
+  | Unot -> compute_binop_csts Beq 0l c
+
+
+let get_precalc_value e =
+  match (H.find precalculated e) with
+  | Some (c) -> c
+  | _ -> raise (Error "get_precalc_value of non precalculated")
+
+(* translate precalculated expression to single constant node *)
+let translate_precalculated e destr destl =
+  let c = get_precalc_value e in
+  generate(Econst(c, destr, destl))
+
+(* traverse tree (only once in whole program) and attempt to precalculate *)
+let rec attempt_precalculate (e:Ttree.expr) =
+  let is_div_by_zero (e:Ttree.expr) = match e.expr_node with
+    | Ebinop(op, e1, e2) -> (was_precalculated e2) && (get_precalc_value e2 = 0l) && op = Bdiv
+    | _ -> false
+  in
+  if not (H.mem precalculated e) then
+    match e.expr_node with
+    | Econst c -> H.add precalculated e (Some c);
+    | Ebinop (op, e1, e2) ->
+      attempt_precalculate e1;
+      attempt_precalculate e2;
+      (* we let 0 division fail during running time *)
+      (* TODO: warn programmer *)
+      if (was_precalculated e1) && (was_precalculated e2) && not (is_div_by_zero e) then
+        let c1 = get_precalc_value e1 in
+        let c2 = get_precalc_value e2 in
+        H.add precalculated e (Some (compute_binop_csts op c1 c2))
+      else H.add precalculated e None
+    | Eunop (op, e2) ->
+      attempt_precalculate e2;
+      if (was_precalculated e2) then
+        let c2 = get_precalc_value e2 in
+        H.add precalculated e (Some(compute_unop_cst op c2))
+      else H.add precalculated e None
+    | _ -> H.add precalculated e None
+
+let rec naive_translate_binop op (e1:Ttree.expr) (e2:Ttree.expr) destr destl =
   let r = Register.fresh () in
   let destl = generate (Embinop(op, r, destr, destl)) in
   let destl = expr e2 r destl in
@@ -28,61 +105,51 @@ let rec naive_apply_binop op (e1:Ttree.expr) (e2:Ttree.expr) destr destl =
 
 and
 
-  apply_binop_two_consts (op:Ttree.binop) c1 c2 destr destl =
-  let int32_of_bool b =
-    Int32.of_int (if b then 1 else 0) in
+  (* evalulate addition and (in)equality with constant values *)
+  translate_unary_version_binop (op:Ttree.binop) c destr destl =
   match op with
-  | Beq -> generate (Econst(int32_of_bool (Int32.equal c1 c2), destr, destl))
-  | Bneq -> generate (Econst(int32_of_bool (not (Int32.equal c1 c2)), destr, destl))
-  | Blt -> generate (Econst(int32_of_bool (Int32.compare c1 c2 < 0), destr, destl))
-  | Ble -> generate (Econst(int32_of_bool (Int32.compare c1 c2 <= 0), destr, destl))
-  | Bgt -> generate (Econst(int32_of_bool (Int32.compare c1 c2 > 0), destr, destl))
-  | Bge -> generate (Econst(int32_of_bool (Int32.compare c1 c2 >= 0), destr, destl))
-  | Badd -> generate (Econst(Int32.add c1 c2, destr, destl))
-  | Bsub -> generate (Econst(Int32.sub c1 c2, destr, destl))
-  | Bmul -> generate (Econst(Int32.mul c1 c2, destr, destl))
-  (* if dividend is 0, compile naively to fail during execution *)
-  | Bdiv -> generate (Econst(Int32.div c1 c2, destr, destl))
-  | Band -> generate (Econst(int32_of_bool(not (Int32.equal c1  0l) && not (Int32.equal c2  0l)), destr, destl))
-  | Bor -> generate (Econst(int32_of_bool(not (Int32.equal c1  0l) || not (Int32.equal c2  0l)), destr, destl))
+  | Badd -> generate(Emunop(Maddi c, destr, destl))
+  | Beq -> generate(Emunop(Msetei c, destr, destl))
+  | Bneq -> generate(Emunop(Msetnei c, destr, destl))
+  | _ -> raise (Error "translate_binop_one_precalc applied to invalid operation")
 
 and
 
-  apply_binop_one_const (op:Ttree.binop) (e:Ttree.expr) c destr destl =
-  let destl =
-    match op with
-    | Badd -> generate(Emunop(Maddi c, destr, destl))
-    | Beq -> generate(Emunop(Msetei c, destr, destl))
-    | Bneq -> generate(Emunop(Msetnei c, destr, destl))
-    | _ -> raise (Error "apply_binop_one_const applied to invalid operation")
-  in
-  expr e destr destl
+  (* translate binop when exactly one expression was precalculated *)
+  translate_binop_one_precalc (op:Ttree.binop) (e1:Ttree.expr) (e2:Ttree.expr) destr destl =
+  let precalc = if (was_precalculated e1) then e1 else e2 in
+  let tocalc = if (precalc = e1) then e2 else e1 in
+  let c = get_precalc_value precalc in
+  let destl = translate_unary_version_binop op c destr destl  in
+  expr tocalc destr destl
 
 and
 
-  expr (e:Ttree.expr) (destr:register) (destl:label) : label = match e.expr_node with
-  | Ttree.Econst e -> generate (Econst(e, destr, destl))
+  expr (e:Ttree.expr) (destr:register) (destl:label) : label =
+  if not (was_precalculated e) then attempt_precalculate e else ();
+  match e.expr_node with
+  | _ when was_precalculated e ->
+    let c = get_precalc_value e in
+    generate (Econst(c, destr, destl))
   | Ttree.Ebinop (op, e1, e2)  ->
     begin
       match (op, e1.expr_node, e2.expr_node) with
-      | (op, (Ttree.Econst c1), (Ttree.Econst c2)) when op != Bdiv && not (Int32.equal c2 0l) ->
-        apply_binop_two_consts op c1 c2 destr destl
-      | (op, (Ttree.Econst c), e) when op = Badd || op = Beq || op = Bneq ->
-        apply_binop_one_const op e2 c destr destl
-      | (op, e, Ttree.Econst c) when op = Badd || op = Beq || op = Bneq ->
-        apply_binop_one_const op e1 c destr destl
-      | (Bsub, e, Ttree.Econst c) ->
-        apply_binop_one_const Badd e1 (Int32.neg c) destr destl
-      | (Beq, _, _) -> naive_apply_binop Msete e1 e2 destr destl
-      | (Bneq, _, _) -> naive_apply_binop Msetne e1 e2 destr destl
-      | (Blt, _, _) -> naive_apply_binop Msetl e1 e2 destr destl
-      | (Ble, _, _) -> naive_apply_binop Msetle e1 e2 destr destl
-      | (Bgt, _, _) -> naive_apply_binop Msetg e1 e2 destr destl
-      | (Bge, _, _) -> naive_apply_binop Msetge e1 e2 destr destl
-      | (Badd, _, _) -> naive_apply_binop Madd e1 e2 destr destl
-      | (Bsub, _, _) -> naive_apply_binop Msub e1 e2 destr destl
-      | (Bmul, _, _) -> naive_apply_binop Mmul e1 e2 destr destl
-      | (Bdiv, _, _) -> naive_apply_binop Mdiv e1 e2 destr destl
+      | _ when (op = Badd || op = Beq || op = Bneq) && ((was_precalculated e1) || was_precalculated e2)->
+        translate_binop_one_precalc op e1 e2 destr destl
+      | _ when op = Bsub && was_precalculated e2 ->
+        let c2 =  get_precalc_value e2 in
+        let destl = translate_unary_version_binop Badd (Int32.neg c2) destr destl in
+        expr e1 destr destl
+      | (Beq, _, _) -> naive_translate_binop Msete e1 e2 destr destl
+      | (Bneq, _, _) -> naive_translate_binop Msetne e1 e2 destr destl
+      | (Blt, _, _) -> naive_translate_binop Msetl e1 e2 destr destl
+      | (Ble, _, _) -> naive_translate_binop Msetle e1 e2 destr destl
+      | (Bgt, _, _) -> naive_translate_binop Msetg e1 e2 destr destl
+      | (Bge, _, _) -> naive_translate_binop Msetge e1 e2 destr destl
+      | (Badd, _, _) -> naive_translate_binop Madd e1 e2 destr destl
+      | (Bsub, _, _) -> naive_translate_binop Msub e1 e2 destr destl
+      | (Bmul, _, _) -> naive_translate_binop Mmul e1 e2 destr destl
+      | (Bdiv, _, _) -> naive_translate_binop Mdiv e1 e2 destr destl
       | (Band, _, _) ->
         (* convert to 0 or 1 *)
         let normalize = generate(Emunop(Msetnei Int32.zero, destr, destl)) in
@@ -100,20 +167,15 @@ and
         let testl = generate (Emubranch (Mjnz, destr, normalize, calculate_second)) in
         expr e2 destr testl
     end
-  | Ttree.Eunop(Uminus, e) ->
+  | Ttree.Eunop(op, e) ->
     begin
-      match e.expr_node with
-      | Econst c -> generate(Econst ((Int32.neg c), destr, destl))
-      (* cannot use apply_binop_one_const on the next line *)
-      | _ ->
-        let (zero_expr:Ttree.expr) = {expr_typ = Ttree.Tint; expr_node = (Ttree.Econst Int32.zero)} in
-        naive_apply_binop Msub zero_expr e destr destl
-    end
-  | Eunop(Unot, e) ->
-    begin
-      match e.expr_node with
-      | Econst c -> apply_binop_two_consts Beq 0l c destr destl
-      | _ ->
+      match (op, e.expr_node) with
+      | _ when was_precalculated e ->
+        translate_precalculated e destr destl
+      | (Uminus, _) ->
+        let (zero_expr:Ttree.expr) = {expr_typ = Ttree.Tint; expr_node = (Ttree.Econst 0l)} in
+        naive_translate_binop Msub zero_expr e destr destl
+      | (Unot, _) ->
         let destl = generate(Emunop(Msetei Int32.zero, destr, destl)) in
         expr e destr destl
     end
@@ -158,6 +220,7 @@ and
   | Ttree.Esizeof structure ->
     let num_words = Int32.of_int ((Hashtbl.length structure.str_fields) * Memory.word_size) in
     generate (Econst(num_words, destr, destl))
+  | Ttree.Econst c -> raise (Error "constant expr was not precalculated")
 
 let rec stmt (s:Ttree.stmt) destl retr exitl = match s with
   | Ttree.Sreturn e ->
