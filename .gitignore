@@ -21,3 +21,11 @@ setup.log
 
 # Merlin configuring file for Vim and Emacs
 .merlin
+
+# Target
+mini-c
+
+# Output files
+*.s
+tests/a.out
+tests/out
